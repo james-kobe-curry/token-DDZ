@@ -1,69 +1,82 @@
-# 局域网跨平台联机方案
+# 局域网跨平台联机
 
-## 目标与当前状态
+## 当前状态
 
-目标是在没有公网服务器的情况下，让同一 Wi-Fi 内的 iPhone、iPad 和 Android 手机组成三人好友房。`0.1.6` 已完成第一个可试玩里程碑：电脑运行 Node 权威房主服务，三台设备通过浏览器或 Android APK 使用六位房间码加入。
+`0.1.7` 已实现不依赖电脑的 Android 手机房主 Beta。任意一台安装 APK 的 Android 手机都可在“好友房”中点击“本机创建房间”，另外两台同一局域网内的 Android 或 Apple 设备通过 APK 或浏览器加入。
 
-当前实现已经具备服务端洗牌、叫分与出牌判定、每位玩家的独立暗牌投影、递增动作序号、状态版本校验、重复动作幂等处理、心跳与重连凭证。尚未完成手机直接担任房主、Bonjour/mDNS 自动发现、二维码、掉线 AI 托管、iOS 原生工程和房主迁移。
+当前已经具备：
 
-Capacitor 本身支持同一套 Web 应用进入 iOS 和 Android 原生容器，因此牌桌、规则引擎和大部分联机状态机可以跨端复用。平台差异主要集中在局域网发现、权限和房主手机上的原生监听服务。
+- Android 前台内置 HTTP/WebSocket 服务，直接分发 APK 中的游戏网页并承载实时连接。
+- 六位房间码、固定三人座位、准备开局和逆时针行动顺序。
+- 房主端权威洗牌、叫分、出牌判定、倍率和胜负状态；客机只提交操作意图。
+- 每位玩家独立的暗牌投影，其他玩家只能看到剩余张数。
+- `stateVersion` 状态版本、玩家递增 `seq`、重复动作幂等确认和过期动作拒绝。
+- 断线凭证恢复；相同身份重新连接时，旧连接会被替换。
+- 电脑 Node 房主继续作为开发调试和兼容入口。
 
-## 当前可玩拓扑：电脑权威房主
+尚未实现自动发现、二维码加入、掉线 AI 托管、同局再来一盘、房主迁移、公网匹配和 iOS 原生房主。房主手机离开房间、切后台或锁屏后不能保证牌局继续，因此首版要求房主保持游戏在前台。
+
+## 当前拓扑：Android 手机权威房主
 
 ```text
 iPhone / iPad 浏览器 ─┐
-Android 浏览器或 APK ─┼─ WebSocket ─ 同一 Wi-Fi 内的电脑（Node 权威服务）
-第三台移动设备 ───────┘
+Android 浏览器或 APK ─┼─ HTTP + WebSocket ─ Android 房主手机
+Android APK ──────────┘                         │
+                                               └─ 本地权威状态与规则判定
 ```
 
-电脑运行 `npm run build` 和 `npm run lan:serve` 后，会打印可访问的局域网地址。浏览器直接打开该 HTTP 地址；Android APK 在好友房内输入 `ws://电脑IP:4174/ws`。服务端只向每个连接投影自己的手牌，其他玩家只能看到剩余张数。
+Android 原生层负责监听 `4174` 端口、HTTP 静态资源和 RFC 6455 WebSocket 传输；房主 WebView 中复用项目的纯 JavaScript 权威规则 reducer。这样不会维护 Java/Kotlin 与网页两套斗地主规则，手机房主和电脑房主也使用同一消息协议。
 
-## 下一阶段拓扑：房主手机权威主机
+## 使用方法
 
-```text
-Android / iPhone 客机 ─┐
-                       ├─ WebSocket ─ 房主手机（权威牌局状态）
-Android / iPhone 客机 ─┘                    │
-                                            └─ 本地洗牌、验牌、计时、断线快照
-```
+1. 三台设备连接同一 Wi-Fi。没有路由器时可由房主 Android 手机开启热点，再让另外两台连接该热点。
+2. 房主在 Android APK 中进入“好友房”，点击“本机创建房间”。
+3. 房主页面显示 `http://局域网IP:4174` 和六位房间码。
+4. iPhone、iPad 或浏览器用户打开该 HTTP 地址，然后输入房间码；另一台 Android APK 也可填写对应的 `ws://局域网IP:4174/ws` 与房间码。
+5. 三名玩家全部准备后自动开局。房主应保持应用前台和屏幕常亮。
 
-- 房主创建房间后，由 Kotlin/Swift Capacitor 插件在前台启动局域网 WebSocket 服务；这一部分尚未实现。
-- 房主保存唯一权威状态；客机只发送“叫分、选定出牌、不出”等意图，不能直接改手牌、倍数或胜负。
-- 每个动作携带 `roomId`、`playerId`、递增 `seq`、当前状态版本和消息签名摘要。房主验证轮次、牌权和牌型后广播新快照。
-- 规则判定复用现有纯 JavaScript 游戏逻辑，先把 `GameRoom` 内的状态迁移为可序列化 reducer，避免本地版与联机版产生两套规则。
-- 房主 App 必须保持前台；首版不做房主迁移。房主离开时明确结束房间，避免三台设备出现不同胜负。
+少数手机热点会启用客户端隔离，或不向热点主机暴露可访问的私有 IPv4 地址。这种情况下页面不会显示可分享地址，或客机无法访问；请改用普通 Wi-Fi。首版采用手动地址加房间码加入，不承诺所有厂商热点模式都可用。
 
-## 加入房间与发现
+## 同步与安全边界
 
-首版同时保留两种入口：
-
-1. 房主展示包含局域网地址、端口、房间号和一次性密钥的二维码，客机扫码直连。这条路径最稳定，也不依赖广播发现。
-2. 使用 Bonjour/mDNS 展示同一 Wi-Fi 内的房间列表；发现失败时仍可输入六位房间码或扫码加入。
-
-房间握手后分配固定座位并交换昵称、头像和客户端版本。版本不一致时拒绝开局，防止规则差异造成不同步。
-
-## 同步与断线恢复
-
-- 房主每次只接受当前 `stateVersion` 上的一个动作，重复 `seq` 直接返回已确认结果，解决双击和网络重发。
-- 广播内容分为小型动作事件与定期完整快照；客机发现版本跳号时主动请求快照。
-- 使用 3 秒心跳、8 秒离线标记和 30 秒重连窗口。玩家短暂切后台后可凭重连令牌恢复原座位。
-- 掉线期间由房主按该玩家设置的 AI 难度托管；重连后只在新回合交回控制，避免一半动作来自 AI、一半来自真人。
-- 洗牌种子由三名玩家分别提交承诺值，全部锁定后合成最终种子；结束时公开各自种子，现有公平验证界面可继续复用。
+- 房主保存唯一权威状态；客机不能直接修改手牌、牌权、倍数或胜负。
+- 动作必须携带客户端当前 `stateVersion` 和玩家递增 `seq`。版本过期会要求先同步，重复序号只返回已确认结果。
+- 房主向每个连接生成私有快照，不会把其他玩家的手牌发给客机。
+- 房间恢复令牌保存在该设备的本地存储中，只应用于局域网断线重连；它不是互联网账号凭证。
+- 明文 `ws://` 仅允许 `localhost`、`.local` 和 RFC 1918 私有局域网地址；公网连接必须使用 `wss://`。
+- 当前服务面向可信的家庭或朋友局域网，不等同于有独立反作弊服务的公网竞技系统。
 
 ## 平台权限
 
-- iOS 需要在 `Info.plist` 提供 `NSLocalNetworkUsageDescription`；使用 Bonjour 浏览或注册房间时还要声明实际使用的 `NSBonjourServices` 类型。应在用户主动点击“创建/加入好友房”后再触发系统权限提示。
-- Android 当前目标 SDK 36 可通过 `INTERNET` 权限访问局域网。项目升级到 Android 17 / SDK 37 后，需要声明并运行时申请 `ACCESS_LOCAL_NETWORK`，同时处理拒绝和撤销。
-- 直连地址优先使用 `wss://`。开发期若使用明文 `ws://`，只允许局域网目标并配置最小范围的网络安全策略，不能全局关闭传输安全。
+- Android 当前目标 SDK 36 使用 `INTERNET` 权限监听和访问局域网。项目升级到 Android 17 / SDK 37 后，需要按新平台要求声明并运行时申请 `ACCESS_LOCAL_NETWORK`。
+- Apple 设备当前以浏览器客机加入，不需要本项目的 iOS 原生工程。未来制作 iOS 原生包时，需要提供 `NSLocalNetworkUsageDescription`；如果加入 Bonjour，还要声明实际使用的 `NSBonjourServices`。
 
-官方依据：[Capacitor v8 跨平台说明](https://capacitorjs.com/docs)、[Apple 本地网络隐私](https://developer.apple.com/documentation/Technotes/tn3179-understanding-local-network-privacy)、[Android 本地网络权限](https://developer.android.com/privacy-and-security/local-network-permission)。
+官方依据：[Capacitor 跨平台文档](https://capacitorjs.com/docs)、[Apple 本地网络隐私](https://developer.apple.com/documentation/Technotes/tn3179-understanding-local-network-privacy)、[Android 本地网络权限](https://developer.android.com/privacy-and-security/local-network-permission)。
 
-## 后续实施顺序
+## 开发验证
 
-1. 已完成：纯 reducer、确定性同步测试、消息协议、桌面 Node 权威服务、三客户端联机冒烟测试。
-2. 完善当前 Beta：房间内退出确认、掉线超时托管、同局再来一盘和弱网提示。
-3. 实现 Android 房主插件、二维码加入和快照恢复，再完成多台 Android 真机互联。
-4. 添加 iOS 工程和 Swift 房主插件，配置本地网络隐私说明与 Bonjour 服务。
-5. 完成 Android ↔ iPhone、iPhone ↔ iPhone、弱网重连、来电切后台、拒绝权限等测试矩阵。
+电脑兼容房主：
 
-首个可试玩里程碑应只承诺“同 Wi-Fi、三台设备、房主保持前台、无观战”；公网匹配、账号、语音、房主迁移和反作弊服务不混入这一阶段。
+```bash
+npm run build
+npm run lan:serve
+npm run smoke:lan
+```
+
+Android 手机房主可通过 ADB 将设备端口转发到电脑，再复用相同的三客户端联机冒烟测试：
+
+```bash
+adb forward tcp:4274 tcp:4174
+$env:LAN_WS_URL='ws://127.0.0.1:4274/ws'
+npm run smoke:lan
+```
+
+该测试会验证三名真实 WebSocket 客户端、准备开局、暗牌隔离、动作版本和重复动作幂等性。
+
+## 后续优先级
+
+1. 房间内退出确认、房主结束房间提示、掉线倒计时与 AI 托管。
+2. 二维码加入和局域网自动发现，减少手动输入 IP。
+3. 同局再来一盘、弱网恢复和 Android 真机/热点兼容矩阵。
+4. iOS 原生客机与 Android ↔ iPhone 真机回归；随后再评估 iOS 房主。
+5. 若要支持异地联机，再引入独立服务端、账号、安全传输、房间恢复和反作弊能力。

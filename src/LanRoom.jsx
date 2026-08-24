@@ -2,19 +2,21 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { canBeat, classifyPlay, enumeratePlayableOptions, findBestGesturePlay, matchLikelyPlay, playNames } from './gameLogic';
 import { defaultLanWebSocketUrl, LanClient, readLanSession } from './lanClient';
+import { canHostOnThisDevice, PhoneLanHostController } from './phoneLanHost';
 import { Icon } from './icons';
 
 const SERVER_KEY = 'token-landlords:lan-server:v1';
 
 function normalizeServerUrl(value) {
   let url = String(value || '').trim();
-  if (!/^wss?:\/\//i.test(url)) url = `ws://${url}`;
+  if (/^https?:\/\//i.test(url)) url = url.replace(/^http/i, 'ws');
+  else if (!/^wss?:\/\//i.test(url)) url = `ws://${url}`;
   const parsed = new URL(url);
   if (!parsed.pathname || parsed.pathname === '/') parsed.pathname = '/ws';
   if (Capacitor.isNativePlatform() && parsed.protocol === 'ws:') {
     const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
     const privateHost = host === 'localhost' || host === '::1' || host.endsWith('.local') || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || (() => { const match = host.match(/^172\.(\d+)\./); return match && Number(match[1]) >= 16 && Number(match[1]) <= 31; })();
-    if (!privateHost) throw new Error('原生版明文连接只允许同一局域网内的电脑地址');
+    if (!privateHost) throw new Error('原生版明文连接只允许同一局域网内的房主地址');
   }
   return parsed.toString();
 }
@@ -54,8 +56,8 @@ function LanMatch({ room, client, onExit }) {
   const canSubmit = Boolean(selectedCombo && canBeat(selectedCombo, game.lastPlay));
   const hints = useMemo(() => enumeratePlayableOptions(game.selfHand, game.lastPlay), [game.selfHand, game.lastPlay]);
   // Dou Dizhu proceeds counter-clockwise on this table: self -> right -> left.
-  const rightSeat = (self + 1) % 3;
-  const leftSeat = (self + 2) % 3;
+  const rightSeat = (self + 2) % 3;
+  const leftSeat = (self + 1) % 3;
   const playerAt = (seat) => room.players.find((player) => player.seat === seat);
 
   useEffect(() => {
@@ -213,21 +215,29 @@ function LanMatch({ room, client, onExit }) {
 }
 
 export default function LanRoom({ profile, onExit }) {
+  const androidHostCapable = canHostOnThisDevice();
   const defaultUrl = useMemo(() => {
-    try { return localStorage.getItem(SERVER_KEY) || defaultLanWebSocketUrl(); } catch { return defaultLanWebSocketUrl(); }
-  }, []);
+    const fallback = androidHostCapable ? 'ws://192.168.1.2:4174/ws' : defaultLanWebSocketUrl();
+    try { return localStorage.getItem(SERVER_KEY) || fallback; } catch { return fallback; }
+  }, [androidHostCapable]);
   const [serverUrl, setServerUrl] = useState(defaultUrl);
   const [roomCode, setRoomCode] = useState('');
   const [status, setStatus] = useState('idle');
   const [room, setRoom] = useState(null);
   const [error, setError] = useState('');
+  const [hostInfo, setHostInfo] = useState(null);
+  const [hostBusy, setHostBusy] = useState(false);
   const savedSession = useMemo(() => readLanSession(), []);
   const clientRef = useRef(null);
+  const hostControllerRef = useRef(null);
 
-  useEffect(() => () => clientRef.current?.close(), []);
+  useEffect(() => () => {
+    clientRef.current?.close();
+    hostControllerRef.current?.stop();
+  }, []);
 
-  const connect = async () => {
-    const url = normalizeServerUrl(serverUrl);
+  const connect = async (address = serverUrl) => {
+    const url = normalizeServerUrl(address);
     clientRef.current?.close();
     const client = new LanClient({
       url,
@@ -245,6 +255,29 @@ export default function LanRoom({ profile, onExit }) {
     try { await action(await connect()); } catch (reason) { setError(reason.message); setStatus('error'); }
   };
 
+  const startPhoneRoom = async () => {
+    setError('');
+    setHostBusy(true);
+    try {
+      await hostControllerRef.current?.stop();
+      const controller = new PhoneLanHostController({ onStopped: (reason) => { setError(reason); setStatus('error'); } });
+      hostControllerRef.current = controller;
+      const info = await controller.start({ port: 4174 });
+      setHostInfo(info);
+      setServerUrl(info.webSocketUrl);
+      const client = await connect(info.webSocketUrl);
+      await client.createRoom(profile.name);
+    } catch (reason) {
+      await hostControllerRef.current?.stop();
+      hostControllerRef.current = null;
+      setHostInfo(null);
+      setError(reason.message || '手机开房失败');
+      setStatus('error');
+    } finally {
+      setHostBusy(false);
+    }
+  };
+
   if (room?.game) return <LanMatch room={room} client={clientRef.current} onExit={onExit} />;
 
   return (
@@ -255,18 +288,21 @@ export default function LanRoom({ profile, onExit }) {
         <span className="room-seal">友</span>
         <small>LOCAL NETWORK · BETA</small>
         <h1>{room ? `房间 ${room.code}` : '局域网好友房'}</h1>
-        {!room ? <p>同一 Wi-Fi 下，由一台电脑运行房主服务；苹果与安卓浏览器打开同一个地址即可加入。</p> : <p>三名玩家全部准备后，房主会生成唯一权威牌局。</p>}
+        {!room ? <p>{androidHostCapable ? '本机可直接担任房主；另外两台设备连接同一 Wi-Fi 或本机热点后即可加入。' : '连接同一 Wi-Fi 下的 Android 房主，输入服务地址和六位房间码即可加入。'}</p> : <p>三名玩家全部准备后，房主手机会生成唯一权威牌局。</p>}
 
         {!room ? (
           <>
+            {androidHostCapable && <button className="btn btn-primary lan-phone-host" disabled={hostBusy} onClick={startPhoneRoom}><Icon name="users" /> {hostBusy ? '正在启动房主' : '本机创建房间'}</button>}
+            {androidHostCapable && <div className="lan-divider"><span>或加入其他安卓房主</span></div>}
             <label className="lan-field"><span>房主服务地址</span><input value={serverUrl} onChange={(event) => setServerUrl(event.target.value)} placeholder="ws://192.168.1.10:4174/ws" /></label>
-            {Capacitor.isNativePlatform() && <small className="lan-native-note">当前原生包需要输入运行服务的电脑局域网地址；手机直开房间将在原生房主插件阶段开放。</small>}
-            <div className="lan-create-row"><button className="btn btn-primary" onClick={() => run((client) => client.createRoom(profile.name))}><Icon name="users" /> 创建房间</button><i>或</i><input value={roomCode} maxLength={6} onChange={(event) => setRoomCode(event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, ''))} placeholder="六位房间码" /><button className="btn btn-ghost" disabled={roomCode.length !== 6} onClick={() => run((client) => client.joinRoom(roomCode, profile.name))}>加入</button></div>
-            {savedSession && <button className="lan-reconnect" onClick={() => run((client) => client.reconnect(savedSession))}>恢复房间 {savedSession.roomCode}</button>}
+            {Capacitor.isNativePlatform() && <small className="lan-native-note">房主地址可从对方房间页复制。使用手机热点时，另外两台设备连接该热点即可。</small>}
+            <div className={`lan-create-row ${androidHostCapable ? 'join-only' : ''}`}>{!androidHostCapable && <><button className="btn btn-primary" onClick={() => run((client) => client.createRoom(profile.name))}><Icon name="users" /> 创建房间</button><i>或</i></>}<input value={roomCode} maxLength={6} onChange={(event) => setRoomCode(event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, ''))} placeholder="六位房间码" /><button className="btn btn-ghost" disabled={roomCode.length !== 6} onClick={() => run((client) => client.joinRoom(roomCode, profile.name))}>加入</button></div>
+            {savedSession && <button className="lan-reconnect" onClick={() => run((client) => client.reconnect(savedSession))}>恢复房间 {savedSession.code}</button>}
           </>
         ) : (
           <>
             <div className="lan-code"><span>房间码</span><b>{room.code}</b><button onClick={() => navigator.clipboard?.writeText(room.code)}>复制</button></div>
+            {hostInfo && <div className="lan-host-share"><span>牌友浏览器打开</span><b>{hostInfo.httpAddresses?.[0] || '请先连接 Wi-Fi 或开启热点'}</b>{hostInfo.httpAddresses?.[0] && <button onClick={() => navigator.clipboard?.writeText(hostInfo.httpAddresses[0])}>复制地址</button>}</div>}
             <div className="lan-player-list">{[0, 1, 2].map((seat) => { const player = room.players.find((item) => item.seat === seat); return <div key={seat} className={player?.ready ? 'ready' : ''}><i>{seat + 1}</i><span><strong>{player?.name || '等待牌友加入'}</strong><small>{player ? player.ready ? '已准备' : player.connected ? '在线 · 未准备' : '等待重连' : '空座位'}</small></span>{player?.ready && <Icon name="check" />}</div>; })}</div>
             <button className="btn btn-primary lan-ready" onClick={() => { setError(''); clientRef.current.setReady(!room.players.find((player) => player.seat === room.selfPlayer)?.ready).catch((reason) => setError(reason.message)); }}>{room.players.find((player) => player.seat === room.selfPlayer)?.ready ? '取消准备' : '准备开局'}</button>
           </>
