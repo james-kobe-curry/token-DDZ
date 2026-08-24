@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Icon } from './icons';
 import {
@@ -24,6 +24,7 @@ import {
 } from './gameLogic';
 
 const IS_NATIVE_PLATFORM = Capacitor.isNativePlatform();
+const GameVoice = registerPlugin('GameVoice');
 const BOT_NAMES = ['墨客·小七', '红袖·阿洛'];
 const COMBO_COPY = {
   bomb: ['炸', '一锤定音'], rocket: ['王', '天地同辉'], straight: ['顺', '行云流水'],
@@ -35,7 +36,7 @@ const CARD_BACK_SKINS = {
   '赤霞牌背': 'card-back-sunset', '创世链路': 'card-back-genesis',
 };
 const GAME_SETTINGS_KEY = 'token-landlords:match-settings:v2';
-const DEFAULT_GAME_SETTINGS = { soundOn: true, vibrationOn: true, smartArrange: true, autoMatch: true, motionOn: true, aiDifficulty: 'elite' };
+const DEFAULT_GAME_SETTINGS = { soundOn: true, voiceOn: true, vibrationOn: true, smartArrange: true, autoMatch: true, motionOn: true, aiDifficulty: 'elite' };
 
 function loadGameSettings() {
   if (typeof window === 'undefined') return DEFAULT_GAME_SETTINGS;
@@ -48,12 +49,18 @@ function loadGameSettings() {
 
 const SOUND_PRESETS = {
   select: { notes: [520], duration: .045, type: 'sine', volume: .035 },
-  action: { notes: [260, 390], duration: .08, type: 'triangle', volume: .045 },
+  deal: { notes: [740, 590, 690], duration: .045, gap: .036, type: 'triangle', volume: .035, noise: { duration: .09, volume: .018, frequency: 1800 } },
+  card: { notes: [310, 470], duration: .055, gap: .026, type: 'triangle', volume: .045, noise: { duration: .045, volume: .012, frequency: 1450 } },
+  pair: { notes: [330, 330, 495], duration: .052, gap: .045, type: 'triangle', volume: .045 },
+  triple: { notes: [294, 370, 494], duration: .065, gap: .042, type: 'triangle', volume: .05 },
+  action: { notes: [260, 390], duration: .08, gap: .05, type: 'triangle', volume: .045 },
   pass: { notes: [220, 180], duration: .075, type: 'sine', volume: .035 },
   bid: { notes: [330, 440], duration: .09, type: 'triangle', volume: .05 },
   landlord: { notes: [196, 294, 392, 523], duration: .13, type: 'triangle', volume: .06 },
-  combo: { notes: [262, 392, 523], duration: .1, type: 'triangle', volume: .055 },
-  impact: { notes: [110, 82, 165], duration: .18, type: 'sawtooth', volume: .045 },
+  combo: { notes: [262, 330, 392, 523, 659], duration: .09, gap: .042, type: 'triangle', volume: .05 },
+  impact: { notes: [110, 82, 165], duration: .18, gap: .065, type: 'sawtooth', volume: .045, noise: { duration: .25, volume: .04, frequency: 230 } },
+  win: { notes: [262, 330, 392, 523, 659, 784], duration: .13, gap: .075, type: 'triangle', volume: .055 },
+  loss: { notes: [392, 330, 262, 196], duration: .16, gap: .09, type: 'sine', volume: .045 },
   error: { notes: [190, 155], duration: .1, type: 'square', volume: .025 },
   tick: { notes: [680], duration: .035, type: 'sine', volume: .025 },
   turn: { notes: [392, 587], duration: .11, type: 'triangle', volume: .05 },
@@ -62,6 +69,17 @@ const SOUND_PRESETS = {
 function useGameAudio(enabled) {
   const contextRef = useRef(null);
   useEffect(() => () => contextRef.current?.close(), []);
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return undefined;
+    const unlock = () => {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      contextRef.current ||= new AudioContext();
+      if (contextRef.current.state === 'suspended') contextRef.current.resume();
+    };
+    window.addEventListener('pointerdown', unlock, { passive: true });
+    return () => window.removeEventListener('pointerdown', unlock);
+  }, [enabled]);
   return useCallback((name, pan = 0) => {
     if (!enabled || typeof window === 'undefined') return;
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -71,22 +89,69 @@ function useGameAudio(enabled) {
     if (context.state === 'suspended') context.resume();
     const preset = SOUND_PRESETS[name] || SOUND_PRESETS.action;
     const start = context.currentTime + .008;
+    const gap = preset.gap ?? .055;
     preset.notes.forEach((frequency, index) => {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
       const panner = context.createStereoPanner?.();
       oscillator.type = preset.type;
-      oscillator.frequency.setValueAtTime(frequency, start + index * .055);
-      gain.gain.setValueAtTime(.0001, start + index * .055);
-      gain.gain.exponentialRampToValueAtTime(preset.volume, start + index * .055 + .008);
-      gain.gain.exponentialRampToValueAtTime(.0001, start + index * .055 + preset.duration);
+      oscillator.frequency.setValueAtTime(frequency, start + index * gap);
+      gain.gain.setValueAtTime(.0001, start + index * gap);
+      gain.gain.exponentialRampToValueAtTime(preset.volume, start + index * gap + .008);
+      gain.gain.exponentialRampToValueAtTime(.0001, start + index * gap + preset.duration);
       if (panner) {
         panner.pan.value = pan;
         oscillator.connect(gain).connect(panner).connect(context.destination);
       } else oscillator.connect(gain).connect(context.destination);
-      oscillator.start(start + index * .055);
-      oscillator.stop(start + index * .055 + preset.duration + .02);
+      oscillator.start(start + index * gap);
+      oscillator.stop(start + index * gap + preset.duration + .02);
     });
+    if (preset.noise) {
+      const frames = Math.max(1, Math.floor(context.sampleRate * preset.noise.duration));
+      const buffer = context.createBuffer(1, frames, context.sampleRate);
+      const samples = buffer.getChannelData(0);
+      for (let index = 0; index < frames; index += 1) samples[index] = (Math.random() * 2 - 1) * (1 - index / frames);
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const gain = context.createGain();
+      const panner = context.createStereoPanner?.();
+      source.buffer = buffer;
+      filter.type = preset.noise.frequency < 500 ? 'lowpass' : 'bandpass';
+      filter.frequency.value = preset.noise.frequency;
+      filter.Q.value = 1.4;
+      gain.gain.setValueAtTime(preset.noise.volume, start);
+      gain.gain.exponentialRampToValueAtTime(.0001, start + preset.noise.duration);
+      if (panner) {
+        panner.pan.value = pan;
+        source.connect(filter).connect(gain).connect(panner).connect(context.destination);
+      } else source.connect(filter).connect(gain).connect(context.destination);
+      source.start(start);
+    }
+  }, [enabled]);
+}
+
+function useGameVoice(enabled) {
+  useEffect(() => () => {
+    if (IS_NATIVE_PLATFORM) GameVoice.stop().catch(() => {});
+    else window.speechSynthesis?.cancel();
+  }, []);
+  return useCallback((text, { rate = .96, pitch = 1, interrupt = true } = {}) => {
+    if (!enabled || !text || typeof window === 'undefined') return;
+    const speakInBrowser = () => {
+      if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+      if (interrupt) window.speechSynthesis.cancel();
+      const utterance = new window.SpeechSynthesisUtterance(text);
+      utterance.lang = 'zh-CN';
+      utterance.rate = rate;
+      utterance.pitch = pitch;
+      utterance.volume = .9;
+      const chineseVoice = window.speechSynthesis.getVoices().find((voice) => /^zh[-_]/i.test(voice.lang));
+      if (chineseVoice) utterance.voice = chineseVoice;
+      window.speechSynthesis.speak(utterance);
+    };
+    if (IS_NATIVE_PLATFORM) {
+      GameVoice.speak({ text, rate, pitch, interrupt, volume: .9 }).catch(speakInBrowser);
+    } else speakInBrowser();
   }, [enabled]);
 }
 
@@ -341,6 +406,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
   const [proofOpen, setProofOpen] = useState(false);
   const [replayOpen, setReplayOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(initialSettings.soundOn);
+  const [voiceOn, setVoiceOn] = useState(initialSettings.voiceOn);
   const [vibrationOn, setVibrationOn] = useState(initialSettings.vibrationOn);
   const [utilityPanel, setUtilityPanel] = useState(null);
   const [turnTime, setTurnTime] = useState(20);
@@ -382,6 +448,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
   const aiRequestSerial = useRef(0);
   const hintCursorRef = useRef(0);
   const playSfx = useGameAudio(soundOn);
+  const speakGame = useGameVoice(voiceOn);
   const rewardPool = ranked ? 420 : 300;
   const cardBackSkin = CARD_BACK_SKINS[profile.equipped] || CARD_BACK_SKINS['墨玉牌背'];
 
@@ -468,11 +535,11 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(GAME_SETTINGS_KEY, JSON.stringify({ soundOn, vibrationOn, smartArrange, autoMatch, motionOn, aiDifficulty }));
+      window.localStorage.setItem(GAME_SETTINGS_KEY, JSON.stringify({ soundOn, voiceOn, vibrationOn, smartArrange, autoMatch, motionOn, aiDifficulty }));
     } catch {
       // Browsers may deny storage in privacy mode; gameplay remains available.
     }
-  }, [soundOn, vibrationOn, smartArrange, autoMatch, motionOn, aiDifficulty]);
+  }, [soundOn, voiceOn, vibrationOn, smartArrange, autoMatch, motionOn, aiDifficulty]);
 
   useEffect(() => {
     if (!actionLockRef.current) return undefined;
@@ -557,7 +624,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
       if (demoMatching && demoPairCard) setSelected([demoPairCard.id]);
       if (demoReplay) setReplayOpen(true);
       setToast(demoPlaying ? '' : '请选择叫分');
-      playSfx('action');
+      playSfx('deal');
     }
     init();
     return () => { live = false; };
@@ -594,9 +661,10 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
     setLandlordFx({ player: game.landlord, name, key: Date.now() });
     showAction(game.landlord, '地主', 'landlord', 1550);
     playSfx('landlord', game.landlord === 1 ? -.65 : game.landlord === 2 ? .65 : 0);
+    speakGame(`${name}成为地主`, { rate: .92, pitch: .95 });
     const timer = window.setTimeout(() => setLandlordFx(null), 1550);
     eventTimers.current.push(timer);
-  }, [game?.landlord, playSfx, showAction]);
+  }, [game?.landlord, playSfx, showAction, speakGame]);
 
   useEffect(() => {
     if (game?.phase !== 'playing') {
@@ -616,11 +684,12 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
       previousTurnKey.current = turnKey;
       setTurnTakeover(true);
       playSfx('turn');
+      speakGame(game.lastPlay ? '轮到你出牌' : '你获得牌权', { rate: .98, pitch: 1.03 });
       vibrate([10, 34, 14]);
     }, delay);
     const clearTimer = window.setTimeout(() => setTurnTakeover(false), delay + 1050);
     return () => { window.clearTimeout(cueTimer); window.clearTimeout(clearTimer); };
-  }, [game?.phase, game?.current, game?.turnSerial, playSfx, vibrate]);
+  }, [game?.phase, game?.current, game?.turnSerial, game?.lastPlay, playSfx, speakGame, vibrate]);
 
   const finishBid = (state, bidder) => {
     const landlord = bidder;
@@ -639,6 +708,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
     if (!acquireActionLock()) return false;
     showAction(player, score ? `${score} 分` : '不叫', score === 3 ? 'landlord' : 'normal');
     playSfx(score ? 'bid' : 'pass', player === 1 ? -.65 : player === 2 ? .65 : 0);
+    speakGame(score ? `${['', '一', '两', '三'][score]}分` : '不叫', { rate: 1.02, pitch: player === 1 ? .93 : player === 2 ? 1.06 : 1 });
     vibrate(score === 3 ? [12, 24, 18] : 8);
     setGame((state) => {
       if (!state || state.phase !== 'bidding' || state.current !== player) return state;
@@ -682,13 +752,22 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
     if (!acquireActionLock()) return false;
     const dramatic = ['bomb', 'rocket'].includes(playedCombo.type);
     showAction(player, playNames[playedCombo.type], dramatic ? 'impact' : 'play');
-    playSfx(dramatic ? 'impact' : ['straight', 'pair_straight', 'airplane', 'airplane_single', 'airplane_pair'].includes(playedCombo.type) ? 'combo' : 'action', player === 1 ? -.65 : player === 2 ? .65 : 0);
+    const playSound = dramatic
+      ? 'impact'
+      : ['straight', 'pair_straight', 'airplane', 'airplane_single', 'airplane_pair'].includes(playedCombo.type)
+        ? 'combo'
+        : playedCombo.type === 'pair'
+          ? 'pair'
+          : ['triple', 'triple_single', 'triple_pair'].includes(playedCombo.type) ? 'triple' : 'card';
+    playSfx(playSound, player === 1 ? -.65 : player === 2 ? .65 : 0);
+    speakGame(playNames[playedCombo.type], { rate: dramatic ? .86 : 1, pitch: player === 1 ? .93 : player === 2 ? 1.06 : 1 });
     vibrate(dramatic ? [28, 35, 48] : 10);
     const remaining = Math.max(0, (game?.hands[player]?.length || cards.length) - cards.length);
     if (remaining === 1 || remaining === 2) {
       const timer = window.setTimeout(() => {
         showAction(player, remaining === 1 ? '报单' : '报双', 'alert', 1450);
         playSfx('bid', player === 1 ? -.65 : player === 2 ? .65 : 0);
+        speakGame(remaining === 1 ? '报单' : '报双', { rate: 1.05, pitch: player === 1 ? .93 : player === 2 ? 1.06 : 1 });
       }, 480);
       eventTimers.current.push(timer);
     }
@@ -739,6 +818,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
     }
     showAction(player, '不出', 'pass');
     playSfx('pass', player === 1 ? -.65 : player === 2 ? .65 : 0);
+    speakGame('不出', { rate: 1.02, pitch: player === 1 ? .93 : player === 2 ? 1.06 : 1 });
     setGame((state) => {
       if (!state || state.phase !== 'playing' || state.current !== player || !state.lastPlay) return state;
       const passCount = state.passCount + 1;
@@ -1100,8 +1180,10 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
     if (result && !rewarded.current) {
       rewarded.current = true;
       onFinish(result);
+      playSfx(result.won ? 'win' : 'loss');
+      speakGame(result.won ? '恭喜获胜' : '再接再厉', { rate: .9, pitch: result.won ? 1.06 : .92 });
     }
-  }, [result, onFinish]);
+  }, [result, onFinish, playSfx, speakGame]);
 
   useEffect(() => {
     if (game?.phase !== 'playing' || game.current !== 0) return undefined;
@@ -1239,13 +1321,14 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
       {utilityPanel === 'chat' && (
         <aside className="utility-popover chat-panel">
           <div className="utility-title"><span><Icon name="chat" size={16} /> 快捷聊天</span><button onClick={() => setUtilityPanel(null)}><Icon name="close" size={14} /></button></div>
-          {['稳住，我们能赢。', '这牌打得漂亮！', '合作愉快。', '稍等，我想一想。'].map((message) => <button key={message} onClick={() => { setToast(`你：${message}`); setUtilityPanel(null); }}>{message}</button>)}
+          {['稳住，我们能赢。', '这牌打得漂亮！', '合作愉快。', '稍等，我想一想。'].map((message) => <button key={message} onClick={() => { setToast(`你：${message}`); speakGame(message, { rate: 1.02, pitch: 1.02 }); setUtilityPanel(null); }}>{message}</button>)}
         </aside>
       )}
       {utilityPanel === 'settings' && (
         <aside className="utility-popover settings-panel">
           <div className="utility-title"><span><Icon name="settings" size={16} /> 对局设置</span><button onClick={() => setUtilityPanel(null)}><Icon name="close" size={14} /></button></div>
           <label><span>操作音效<small>选牌、出牌与倒计时提示</small></span><button className={`switch ${soundOn ? 'on' : ''}`} onClick={() => setSoundOn(!soundOn)}><i /></button></label>
+          <label><span>牌局语音<small>叫分、牌型、报单与胜负播报</small></span><button className={`switch ${voiceOn ? 'on' : ''}`} onClick={() => setVoiceOn((value) => !value)}><i /></button></label>
           <label><span>触感反馈<small>选牌轻触与重要牌型震动</small></span><button className={`switch ${vibrationOn ? 'on' : ''}`} onClick={() => setVibrationOn((value) => !value)}><i /></button></label>
           <label><span>智能理牌<small>保持递减并拉开组合</small></span><button className={`switch ${smartArrange ? 'on' : ''}`} onClick={() => setSmartArrange((value) => !value)}><i /></button></label>
           <label><span>智能匹配<small>根据已选牌自动补全牌型</small></span><button className={`switch ${autoMatch ? 'on' : ''}`} onClick={() => setAutoMatch((value) => !value)}><i /></button></label>

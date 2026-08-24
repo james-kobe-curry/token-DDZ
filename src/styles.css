@@ -1416,7 +1416,7 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
   .native-platform .settings-panel label { min-height: 47px; padding-inline: 3px; }
   .native-platform .settings-panel label > span { font-size: 11px; }
   .native-platform .settings-panel label small { margin-top: 2px; font-size: 8px; }
-  .native-platform .settings-panel label:last-of-type { grid-column: 1 / -1; }
+  .native-platform .settings-panel label:last-of-type { grid-column: auto; }
   .native-platform .settings-panel .switch { width: 36px; height: 20px; }
   .native-platform .settings-panel .switch i { width: 16px; height: 16px; }
   .native-platform .settings-panel .switch.on i { transform: translateX(16px); }
