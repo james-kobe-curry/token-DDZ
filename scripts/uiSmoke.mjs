@@ -19,7 +19,7 @@ const lanUrl = process.env.SMOKE_LAN_URL || '';
 const port = 9337;
 const profile = join(tmpdir(), `token-landlords-smoke-${Date.now()}`);
 const browser = spawn(browserPath, [
-  '--headless=new', '--disable-gpu', '--no-sandbox', `--remote-debugging-port=${port}`,
+  '--headless', '--disable-gpu', '--disable-dev-shm-usage', '--no-sandbox', `--remote-debugging-port=${port}`,
   `--user-data-dir=${profile}`, '--window-size=1280,900',
   `${baseUrl}/?play=1&demo=result`,
 ], { stdio: 'ignore' });
@@ -30,7 +30,7 @@ let serial = 0;
 const pending = new Map();
 
 async function findTarget() {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  for (let attempt = 0; attempt < 150; attempt += 1) {
     try {
       const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((response) => response.json());
       const page = targets.find((target) => target.type === 'page');
