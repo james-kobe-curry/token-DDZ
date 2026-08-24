@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Token 斗地主</string>
+    <string name="title_activity_main">Token 斗地主</string>
+    <string name="package_name">com.tokenlandlords.game</string>
+    <string name="custom_url_scheme">com.tokenlandlords.game</string>
+</resources>
