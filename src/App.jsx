@@ -2,11 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core';
 import { App as NativeApp } from '@capacitor/app';
 import GameRoom from './GameRoom';
+import LanRoom from './LanRoom';
 import { Icon } from './icons';
+import packageMetadata from '../package.json';
+import { clearMatchSnapshot, readMatchSnapshot } from './matchStorage';
+import { localDayKey, normalizeDailyProfile } from './profileState';
 
 const defaultProfile = {
   name: '玩家_0721', tokens: 1280, rating: 1260, games: 28, wins: 17, streak: 2,
-  dailyGames: 0, dailyWins: 0, claimed: [], owned: ['墨玉牌背'], equipped: '墨玉牌背',
+  dailyDate: localDayKey(), dailyGames: 0, dailyWins: 0, claimed: [], owned: ['墨玉牌背'], equipped: '墨玉牌背',
 };
 
 const shopItems = [
@@ -64,7 +68,7 @@ function Hero({ onStart }) {
         <span className="soft-badge"><Icon name="shield" size={15} /> 可验证公平牌局</span>
         <h1>每一手好牌，<br /><em>都有迹可循。</em></h1>
         <p>经典三人斗地主，牌局种子摘要开局锁定。纯粹竞技，输赢不扣 Token。</p>
-        <div className="hero-actions"><button className="btn btn-primary btn-large" onClick={() => onStart(false)}><Icon name="play" /> 快速开局</button><span><i className="online-dot" /> 2,861 人在线</span></div>
+        <div className="hero-actions"><button className="btn btn-primary btn-large" onClick={() => onStart(false)}><Icon name="play" /> 快速开局</button><span><i className="online-dot" /> 本地人机 · 随时开局</span></div>
       </div>
       <div className="hero-art" aria-hidden="true">
         <div className="orbit orbit-one" /><div className="orbit orbit-two" />
@@ -76,7 +80,7 @@ function Hero({ onStart }) {
   );
 }
 
-function Modes({ onStart }) {
+function Modes({ onStart, onFriend }) {
   return (
     <section className="section-block">
       <div className="section-heading"><div><span>PLAY MODES</span><h2>选择玩法</h2></div><button>全部玩法 <Icon name="arrow" size={16} /></button></div>
@@ -87,8 +91,8 @@ function Modes({ onStart }) {
         <button className="mode-card ranked" onClick={() => onStart(true)}>
           <div className="mode-icon"><Icon name="trophy" size={32} /></div><div><span className="mode-kicker">赛季 S01</span><h3>排位赛</h3><p>公平竞技 · 冲击 Token 王者</p></div><i className="mode-arrow"><Icon name="play" /></i>
         </button>
-        <button className="mode-card friend" onClick={() => window.alert('好友房将在联机服务接入后开放。')}>
-          <div className="mode-icon"><Icon name="users" size={32} /></div><div><span className="mode-kicker">邀请好友</span><h3>好友房</h3><p>自定义规则 · 不计排位积分</p></div><i className="mode-arrow"><Icon name="arrow" /></i>
+        <button className="mode-card friend" onClick={onFriend}>
+          <div className="mode-icon"><Icon name="users" size={32} /></div><div><span className="mode-kicker">局域网 Beta</span><h3>好友房</h3><p>跨设备同桌 · 权威服务判定</p></div><i className="mode-arrow"><Icon name="arrow" /></i>
         </button>
         <button className="mode-card locked" onClick={() => window.alert('癞子玩法将在 V1.1 解锁。')}>
           <div className="mode-icon"><Icon name="spark" size={32} /></div><div><span className="mode-kicker">即将上线</span><h3>癞子玩法</h3><p>更多组合 · 更高牌型上限</p></div><i className="mode-arrow"><Icon name="lock" size={18} /></i>
@@ -111,13 +115,13 @@ function DailyPanel({ profile, onClaim, setPage }) {
         })}
       </div>
       <button className="view-all" onClick={() => setPage('tasks')}>查看全部任务 <Icon name="arrow" size={15} /></button>
-      <div className="season-strip"><div><span>S01 赛季</span><b>链路初启</b></div><small>还有 26 天</small></div>
+      <div className="season-strip"><div><span>S01 赛季</span><b>链路初启</b></div><small>本地赛季</small></div>
     </aside>
   );
 }
 
-function HomePage({ profile, onStart, onClaim, setPage }) {
-  return <div className="dashboard"><div className="dashboard-main"><Hero onStart={onStart} /><Modes onStart={onStart} /></div><DailyPanel profile={profile} onClaim={onClaim} setPage={setPage} /></div>;
+function HomePage({ profile, onStart, onFriend, onClaim, setPage }) {
+  return <div className="dashboard"><div className="dashboard-main"><Hero onStart={onStart} /><Modes onStart={onStart} onFriend={onFriend} /></div><DailyPanel profile={profile} onClaim={onClaim} setPage={setPage} /></div>;
 }
 
 function RankPage({ profile, onStart }) {
@@ -125,7 +129,7 @@ function RankPage({ profile, onStart }) {
   const leaderboard = [
     ['01', '节点_Zero', 2188, '零'], ['02', '纸牌先知', 2074, '知'], ['03', '链上小地主', 1982, '链'], ['16', profile.name, profile.rating, '玩'], ['17', '顺子研究员', 1248, '顺'],
   ];
-  return <div className="content-page rank-page"><section className="rank-hero"><div className="rank-medal"><span>{rank.tier}</span><i /><i /></div><div><span className="page-kicker">SEASON 01 · 链路初启</span><h1>{rank.name}</h1><p>当前积分 <b>{profile.rating}</b> · 距离下一段位还差 {Math.max(0, rank.next - profile.rating)} 分</p><div className="rank-progress"><i style={{ width: `${Math.min(100, (profile.rating / rank.next) * 100)}%` }} /></div><button className="btn btn-primary" onClick={() => onStart(true)}><Icon name="trophy" /> 开始排位</button></div></section><section className="leaderboard panel"><div className="panel-title"><div><span>TOP PLAYERS</span><h2>本周排行榜</h2></div><small>每小时更新</small></div>{leaderboard.map(([pos, name, score, avatar]) => <div className={`leader-row ${name === profile.name ? 'self' : ''}`} key={pos}><b className="leader-pos">{pos}</b><span className="leader-avatar">{avatar}</span><strong>{name}{name === profile.name && <em>我</em>}</strong><span>{score} 分</span></div>)}</section></div>;
+  return <div className="content-page rank-page"><section className="rank-hero"><div className="rank-medal"><span>{rank.tier}</span><i /><i /></div><div><span className="page-kicker">SEASON 01 · 链路初启</span><h1>{rank.name}</h1><p>当前积分 <b>{profile.rating}</b> · 距离下一段位还差 {Math.max(0, rank.next - profile.rating)} 分</p><div className="rank-progress"><i style={{ width: `${Math.min(100, (profile.rating / rank.next) * 100)}%` }} /></div><button className="btn btn-primary" onClick={() => onStart(true)}><Icon name="trophy" /> 开始排位</button></div></section><section className="leaderboard panel"><div className="panel-title"><div><span>LOCAL DEMO</span><h2>本地演示榜</h2></div><small>非联网排名</small></div>{leaderboard.map(([pos, name, score, avatar]) => <div className={`leader-row ${name === profile.name ? 'self' : ''}`} key={pos}><b className="leader-pos">{pos}</b><span className="leader-avatar">{avatar}</span><strong>{name}{name === profile.name && <em>我</em>}</strong><span>{score} 分</span></div>)}</section></div>;
 }
 
 function TasksPage({ profile, onClaim }) {
@@ -139,23 +143,26 @@ function ShopPage({ profile, onBuy }) {
 
 function ProfilePage({ profile }) {
   const winRate = profile.games ? Math.round((profile.wins / profile.games) * 100) : 0;
-  return <div className="content-page"><section className="profile-hero panel"><div className="big-avatar">玩<span /></div><div><span className="page-kicker">PLAYER PROFILE</span><h1>{profile.name}</h1><p>ID TL-2026-0721 · 加入于 S01 赛季</p><div className="profile-badges"><span><Icon name="shield" size={15} /> 已验证牌手</span><span>{getRank(profile.rating).name}</span></div></div></section><div className="stat-grid"><div className="stat-card"><span>总场次</span><b>{profile.games}</b><small>本赛季</small></div><div className="stat-card"><span>胜率</span><b>{winRate}%</b><small>{profile.wins} 场胜利</small></div><div className="stat-card"><span>最高连胜</span><b>{Math.max(5, profile.streak)}</b><small>继续保持</small></div><div className="stat-card"><span>排位积分</span><b>{profile.rating}</b><small>{getRank(profile.rating).name}</small></div></div><section className="panel owned-panel"><div className="panel-title"><div><span>MY COLLECTION</span><h2>我的藏品</h2></div><small>{profile.owned.length} 件</small></div><div className="owned-list">{profile.owned.map((item) => <span key={item}><i>◈</i><b>{item}</b><small>{item === profile.equipped ? '使用中' : '已拥有'}</small></span>)}</div></section></div>;
+  return <div className="content-page"><section className="profile-hero panel"><div className="big-avatar">玩<span /></div><div><span className="page-kicker">PLAYER PROFILE</span><h1>{profile.name}</h1><p>ID TL-2026-0721 · 加入于 S01 赛季</p><div className="profile-badges"><span><Icon name="shield" size={15} /> 本地牌手</span><span>{getRank(profile.rating).name}</span></div></div></section><div className="stat-grid"><div className="stat-card"><span>总场次</span><b>{profile.games}</b><small>本赛季</small></div><div className="stat-card"><span>胜率</span><b>{winRate}%</b><small>{profile.wins} 场胜利</small></div><div className="stat-card"><span>最高连胜</span><b>{Math.max(5, profile.streak)}</b><small>继续保持</small></div><div className="stat-card"><span>排位积分</span><b>{profile.rating}</b><small>{getRank(profile.rating).name}</small></div></div><section className="panel owned-panel"><div className="panel-title"><div><span>MY COLLECTION</span><h2>我的藏品</h2></div><small>{profile.owned.length} 件</small></div><div className="owned-list">{profile.owned.map((item) => <span key={item}><i>◈</i><b>{item}</b><small>{item === profile.equipped ? '使用中' : '已拥有'}</small></span>)}</div></section></div>;
 }
 
 export default function App() {
   const [profile, setProfile] = useState(() => {
-    try { return { ...defaultProfile, ...JSON.parse(localStorage.getItem('tl-profile') || '{}') }; } catch { return defaultProfile; }
+    try { return normalizeDailyProfile({ ...defaultProfile, ...JSON.parse(localStorage.getItem('tl-profile') || '{}') }); } catch { return defaultProfile; }
   });
   const [page, setPage] = useState('home');
   const [match, setMatch] = useState(() => {
     const preview = new URLSearchParams(window.location.search).get('play');
-    return preview ? { ranked: preview === 'ranked', key: Date.now() } : null;
+    if (preview) return { ranked: preview === 'ranked', key: Date.now() };
+    const snapshot = readMatchSnapshot();
+    return snapshot ? { ranked: snapshot.ranked, key: `resume-${snapshot.savedAt}`, snapshot } : null;
   });
   const [notice, setNotice] = useState('');
   const pageRef = useRef(page);
   const matchRef = useRef(match);
 
   const startMatch = useCallback((ranked) => {
+    clearMatchSnapshot();
     const nextMatch = { ranked, key: Date.now() };
     matchRef.current = nextMatch;
     setMatch(nextMatch);
@@ -164,13 +171,31 @@ export default function App() {
     // Keep native-back state synchronous with the visible route. Waiting for
     // the ref-sync effect leaves a short window where Android believes the
     // finished match is still open and makes the user press Back repeatedly.
+    clearMatchSnapshot();
     matchRef.current = null;
     pageRef.current = 'home';
     setMatch(null);
     setPage('home');
   }, []);
+  const startLan = useCallback(() => {
+    clearMatchSnapshot();
+    pageRef.current = 'lan';
+    setPage('lan');
+  }, []);
+  const exitLan = useCallback(() => {
+    pageRef.current = 'home';
+    setPage('home');
+  }, []);
 
   useEffect(() => { localStorage.setItem('tl-profile', JSON.stringify(profile)); }, [profile]);
+  useEffect(() => {
+    const refreshDailyState = () => setProfile((current) => normalizeDailyProfile(current));
+    const untilTomorrow = new Date();
+    untilTomorrow.setHours(24, 0, 1, 0);
+    const timer = window.setTimeout(refreshDailyState, Math.max(1000, untilTomorrow.getTime() - Date.now()));
+    document.addEventListener('visibilitychange', refreshDailyState);
+    return () => { window.clearTimeout(timer); document.removeEventListener('visibilitychange', refreshDailyState); };
+  }, [profile.dailyDate]);
   useEffect(() => { if (!notice) return undefined; const timer = setTimeout(() => setNotice(''), 2400); return () => clearTimeout(timer); }, [notice]);
   useEffect(() => { pageRef.current = page; }, [page]);
   useEffect(() => { matchRef.current = match; }, [match]);
@@ -192,16 +217,22 @@ export default function App() {
     return () => { listener?.remove(); };
   }, [exitMatch]);
 
-  const finishMatch = (result) => setProfile((current) => ({
-    ...current,
-    tokens: current.tokens + result.tokens,
-    rating: Math.max(0, current.rating + result.rating),
-    games: current.games + 1,
-    wins: current.wins + (result.won ? 1 : 0),
-    streak: result.won ? current.streak + 1 : 0,
-    dailyGames: current.dailyGames + 1,
-    dailyWins: current.dailyWins + (result.won ? 1 : 0),
-  }));
+  const finishMatch = (result) => {
+    clearMatchSnapshot();
+    setProfile((current) => {
+      const fresh = normalizeDailyProfile(current);
+      return {
+        ...fresh,
+        tokens: fresh.tokens + result.tokens,
+        rating: Math.max(0, fresh.rating + result.rating),
+        games: fresh.games + 1,
+        wins: fresh.wins + (result.won ? 1 : 0),
+        streak: result.won ? fresh.streak + 1 : 0,
+        dailyGames: fresh.dailyGames + 1,
+        dailyWins: fresh.dailyWins + (result.won ? 1 : 0),
+      };
+    });
+  };
   const claimTask = (task) => {
     if (profile.claimed.includes(task.id) || profile[task.field] < task.target) return;
     setProfile((current) => ({ ...current, tokens: current.tokens + task.reward, claimed: [...current.claimed, task.id] }));
@@ -223,16 +254,17 @@ export default function App() {
     if (page === 'tasks') return <TasksPage profile={profile} onClaim={claimTask} />;
     if (page === 'shop') return <ShopPage profile={profile} onBuy={buyItem} />;
     if (page === 'profile') return <ProfilePage profile={profile} />;
-    return <HomePage profile={profile} onStart={startMatch} onClaim={claimTask} setPage={setPage} />;
+    return <HomePage profile={profile} onStart={startMatch} onFriend={startLan} onClaim={claimTask} setPage={setPage} />;
   }, [page, profile]);
 
-  if (match) return <GameRoom key={match.key} ranked={match.ranked} profile={profile} onExit={exitMatch} onFinish={finishMatch} />;
+  if (match) return <GameRoom key={match.key} ranked={match.ranked} profile={profile} initialSnapshot={match.snapshot} onExit={exitMatch} onFinish={finishMatch} />;
+  if (page === 'lan') return <LanRoom profile={profile} onExit={exitLan} />;
 
   return (
     <div className="app-shell">
       <div className="app-noise" /><TopBar profile={profile} page={page} setPage={setPage} />
       <main className="app-content">{body}</main>
-      <footer className="site-footer"><Brand /><p>健康游戏 · 公平竞技 · Token 不可交易</p><span>Prototype v0.1</span></footer>
+      <footer className="site-footer"><Brand /><p>健康游戏 · 公平竞技 · Token 不可交易</p><span>Prototype v{packageMetadata.version}</span></footer>
       <MobileNav page={page} setPage={setPage} />
       {notice && <div className="notice-toast"><Icon name="check" size={18} /> {notice}</div>}
     </div>

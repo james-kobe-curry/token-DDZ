@@ -1,0 +1,34 @@
+name: quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run benchmark:ai
+      - run: npm run build
+      - name: Browser and LAN smoke tests
+        run: |
+          npm run dev > /tmp/token-landlords-web.log 2>&1 &
+          APP_PID=$!
+          npm run lan:serve > /tmp/token-landlords-lan.log 2>&1 &
+          LAN_PID=$!
+          trap 'kill $APP_PID $LAN_PID' EXIT
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:4173 > /dev/null && curl --fail --silent http://127.0.0.1:4174/api/health > /dev/null && break
+            sleep 0.2
+          done
+          npm run smoke:lan
+          SMOKE_URL=http://127.0.0.1:4173 SMOKE_LAN_URL=ws://127.0.0.1:4174/ws npm run smoke:ui
+      - run: npm audit --omit=dev --registry=https://registry.npmjs.org

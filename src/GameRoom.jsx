@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Icon } from './icons';
+import { clearMatchSnapshot, writeMatchSnapshot } from './matchStorage';
 import {
   AI_DIFFICULTIES,
   analyzeAiDecision,
@@ -392,7 +393,7 @@ function GameResult({ result, multiplier, onAgain, onExit, onReplay, fairness })
   );
 }
 
-export default function GameRoom({ ranked, profile, onExit, onFinish }) {
+export default function GameRoom({ ranked, profile, initialSnapshot = null, onExit, onFinish }) {
   useEffect(() => {
     document.body.classList.add('game-active');
     return () => document.body.classList.remove('game-active');
@@ -567,6 +568,16 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
       previousLandlord.current = null;
       previousTurnKey.current = null;
       landlordAnimationUntil.current = 0;
+      if (initialSnapshot?.game && round === 0) {
+        const restoredGame = initialSnapshot.game;
+        const activeIds = new Set(restoredGame.hands[0].map((card) => card.id));
+        previousLandlord.current = restoredGame.landlord;
+        setSelected((initialSnapshot.selected || []).filter((id) => activeIds.has(id)));
+        setGame(restoredGame);
+        setToast('已恢复上次未完成的牌局');
+        playSfx('deal');
+        return;
+      }
       const seed = createSeed();
       const dealt = dealWithSeed(seed);
       const commit = await sha256(`${seed}:${dealt.deckOrder.join('|')}`);
@@ -628,7 +639,17 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
     }
     init();
     return () => { live = false; };
-  }, [round, releaseActionLock]);
+  }, [round, releaseActionLock, initialSnapshot]);
+
+  useEffect(() => {
+    if (!game) return undefined;
+    if (game.phase === 'ended' || game.phase === 'redeal') {
+      clearMatchSnapshot();
+      return undefined;
+    }
+    const timer = window.setTimeout(() => writeMatchSnapshot({ ranked, game, selected }), 160);
+    return () => window.clearTimeout(timer);
+  }, [game, selected, ranked]);
 
   useLayoutEffect(() => {
     const cards = Array.from(handElement.current?.querySelectorAll('[data-card-id]') || []);

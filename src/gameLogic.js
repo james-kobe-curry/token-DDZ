@@ -15,10 +15,10 @@ export const GAME_RULES = Object.freeze({
 });
 export const AI_DIFFICULTIES = Object.freeze({
   super: Object.freeze({ id: 'super', name: '超强人机', shortName: '超强', memoryRatio: 1, planningHandLimit: 12, nodeLimit: 26000, samples: 72, teamwork: 1, structureWeight: 4.2, planningWeight: 28, controlWeight: 10, sampleWeight: 54, bombPenalty: 190, accuracy: 1, choiceWindow: 1, description: '完整记牌、未知手牌采样与深度牌路搜索，重视牌权、配合和终局控制。' }),
-  master: Object.freeze({ id: 'master', name: '大师', shortName: '大师', memoryRatio: .92, planningHandLimit: 10, nodeLimit: 15000, samples: 36, teamwork: .98, structureWeight: 4, planningWeight: 23, controlWeight: 10, sampleWeight: 60, bombPenalty: 175, accuracy: .96, choiceWindow: 2, description: '高精度记牌和概率推演，稳定配合队友并谨慎使用炸弹。' }),
-  elite: Object.freeze({ id: 'elite', name: '精英', shortName: '精英', memoryRatio: .72, planningHandLimit: 8, nodeLimit: 8000, samples: 14, teamwork: .86, structureWeight: 3.2, planningWeight: 17, controlWeight: 7, sampleWeight: 42, bombPenalty: 155, accuracy: .82, choiceWindow: 4, description: '具备可靠的结构判断、局势意识和部分未知牌推演。' }),
-  normal: Object.freeze({ id: 'normal', name: '普通', shortName: '普通', memoryRatio: .42, planningHandLimit: 6, nodeLimit: 3500, samples: 4, teamwork: .62, structureWeight: 2, planningWeight: 10, controlWeight: 4, sampleWeight: 24, bombPenalty: 125, accuracy: .55, choiceWindow: 8, description: '懂基本牌型与简单配合，偶尔拆牌或错过更优牌路。' }),
-  rookie: Object.freeze({ id: 'rookie', name: '菜鸟', shortName: '菜鸟', memoryRatio: 0, planningHandLimit: 0, nodeLimit: 0, samples: 0, teamwork: .22, structureWeight: .65, planningWeight: 0, controlWeight: 0, sampleWeight: 0, bombPenalty: 70, accuracy: .2, choiceWindow: 14, description: '主要依据当前牌型行动，较少记牌、计算和主动配合。' }),
+  master: Object.freeze({ id: 'master', name: '大师', shortName: '大师', memoryRatio: .92, planningHandLimit: 10, nodeLimit: 15000, samples: 36, teamwork: .98, structureWeight: 4, planningWeight: 23, controlWeight: 10, sampleWeight: 60, bombPenalty: 175, accuracy: .72, choiceWindow: 4, description: '高精度记牌和概率推演，稳定配合队友并谨慎使用炸弹。' }),
+  elite: Object.freeze({ id: 'elite', name: '精英', shortName: '精英', memoryRatio: .72, planningHandLimit: 8, nodeLimit: 8000, samples: 14, teamwork: .86, structureWeight: 3.2, planningWeight: 17, controlWeight: 7, sampleWeight: 42, bombPenalty: 155, accuracy: .45, choiceWindow: 7, description: '具备可靠的结构判断、局势意识和部分未知牌推演。' }),
+  normal: Object.freeze({ id: 'normal', name: '普通', shortName: '普通', memoryRatio: .42, planningHandLimit: 6, nodeLimit: 3500, samples: 4, teamwork: .62, structureWeight: 2, planningWeight: 10, controlWeight: 4, sampleWeight: 24, bombPenalty: 125, accuracy: .24, choiceWindow: 11, description: '懂基本牌型与简单配合，偶尔拆牌或错过更优牌路。' }),
+  rookie: Object.freeze({ id: 'rookie', name: '菜鸟', shortName: '菜鸟', memoryRatio: 0, planningHandLimit: 0, nodeLimit: 0, samples: 0, teamwork: .22, structureWeight: .65, planningWeight: 0, controlWeight: 0, sampleWeight: 0, bombPenalty: 70, accuracy: .05, choiceWindow: 14, description: '主要依据当前牌型行动，较少记牌、计算和主动配合。' }),
 });
 export const rankValue = (rank) => {
   const index = RANKS.indexOf(rank);
@@ -831,18 +831,22 @@ export function rankStrategicActions(hand, previous = null, context = {}, diffic
   const { currentPlayer = null, landlord = null, lastPlayer = previous.player ?? null, handSizes = [] } = context;
   const teammateHasLead = sameTeam(currentPlayer, lastPlayer, landlord);
   const landlordThreat = landlord !== null && landlord !== undefined && (handSizes[landlord] ?? 99) <= 2;
+  const landlordPressure = landlord !== null && landlord !== undefined && (handSizes[landlord] ?? 99) <= 4;
   const landlordActsNext = currentPlayer !== null && landlord === nextPlayerCounterClockwise(currentPlayer);
   const mustTakeOver = teammateHasLead && landlordThreat && landlordActsNext && ['single', 'pair'].includes(previous.type);
+  const superCanClose = profile.id === 'super' && (best.remaining.length <= 2 || best.turns === 1);
+  const superCoverWindow = profile.id === 'super' && landlordPressure && landlordActsNext && (best.responseRate ?? 1) <= .35;
+  const proactiveTakeOver = teammateHasLead && (superCanClose || superCoverWindow);
   const opposingPlayers = handSizes.map((_, player) => player).filter((player) => player !== currentPlayer && !sameTeam(currentPlayer, player, landlord));
   const opponentThreat = opposingPlayers.some((player) => (handSizes[player] ?? 99) <= 2);
   let passScore = best.score + 22;
   let reason = '可以保留牌力，但会继续让出当前牌权';
-  if (teammateHasLead && !mustTakeOver) {
+  if (teammateHasLead && !mustTakeOver && !proactiveTakeOver) {
     passScore = profile.teamwork >= .55 ? best.score - 520 : best.score + 38;
     reason = profile.teamwork >= .55 ? '队友持有牌权，避免内耗并保留控制牌' : '可以让队友继续掌握牌权';
-  } else if (mustTakeOver || opponentThreat) {
+  } else if (mustTakeOver || proactiveTakeOver || opponentThreat) {
     passScore = best.score + 520;
-    reason = mustTakeOver ? '地主即将行动，需要主动接过队友牌权封堵' : '对手接近走完，此时不出风险很高';
+    reason = mustTakeOver || proactiveTakeOver ? '地主即将行动或本手可快速收官，需要主动接过牌权' : '对手接近走完，此时不出风险很高';
   } else if (best.breakCost >= 80 || ['bomb', 'rocket'].includes(best.combo.type)) {
     passScore = currentPlayer === null ? best.score + 22 : best.score - 28;
     reason = '当前压制需要破坏炸弹或王炸，暂时不出更利于保留终局牌力';

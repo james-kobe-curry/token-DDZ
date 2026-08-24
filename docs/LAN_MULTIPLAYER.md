@@ -2,11 +2,23 @@
 
 ## 目标与当前状态
 
-目标是在没有公网服务器的情况下，让同一 Wi-Fi 内的 iPhone、iPad 和 Android 手机组成三人好友房。当前 `0.1.3` 仍是本地人机版，好友房入口不会伪装成可用功能；本方案是下一阶段的实施边界。
+目标是在没有公网服务器的情况下，让同一 Wi-Fi 内的 iPhone、iPad 和 Android 手机组成三人好友房。`0.1.6` 已完成第一个可试玩里程碑：电脑运行 Node 权威房主服务，三台设备通过浏览器或 Android APK 使用六位房间码加入。
+
+当前实现已经具备服务端洗牌、叫分与出牌判定、每位玩家的独立暗牌投影、递增动作序号、状态版本校验、重复动作幂等处理、心跳与重连凭证。尚未完成手机直接担任房主、Bonjour/mDNS 自动发现、二维码、掉线 AI 托管、iOS 原生工程和房主迁移。
 
 Capacitor 本身支持同一套 Web 应用进入 iOS 和 Android 原生容器，因此牌桌、规则引擎和大部分联机状态机可以跨端复用。平台差异主要集中在局域网发现、权限和房主手机上的原生监听服务。
 
-## 推荐拓扑：房主手机权威主机
+## 当前可玩拓扑：电脑权威房主
+
+```text
+iPhone / iPad 浏览器 ─┐
+Android 浏览器或 APK ─┼─ WebSocket ─ 同一 Wi-Fi 内的电脑（Node 权威服务）
+第三台移动设备 ───────┘
+```
+
+电脑运行 `npm run build` 和 `npm run lan:serve` 后，会打印可访问的局域网地址。浏览器直接打开该 HTTP 地址；Android APK 在好友房内输入 `ws://电脑IP:4174/ws`。服务端只向每个连接投影自己的手牌，其他玩家只能看到剩余张数。
+
+## 下一阶段拓扑：房主手机权威主机
 
 ```text
 Android / iPhone 客机 ─┐
@@ -15,7 +27,7 @@ Android / iPhone 客机 ─┘                    │
                                             └─ 本地洗牌、验牌、计时、断线快照
 ```
 
-- 房主创建房间后，由 Kotlin/Swift Capacitor 插件在前台启动局域网 WebSocket 服务。
+- 房主创建房间后，由 Kotlin/Swift Capacitor 插件在前台启动局域网 WebSocket 服务；这一部分尚未实现。
 - 房主保存唯一权威状态；客机只发送“叫分、选定出牌、不出”等意图，不能直接改手牌、倍数或胜负。
 - 每个动作携带 `roomId`、`playerId`、递增 `seq`、当前状态版本和消息签名摘要。房主验证轮次、牌权和牌型后广播新快照。
 - 规则判定复用现有纯 JavaScript 游戏逻辑，先把 `GameRoom` 内的状态迁移为可序列化 reducer，避免本地版与联机版产生两套规则。
@@ -46,11 +58,11 @@ Android / iPhone 客机 ─┘                    │
 
 官方依据：[Capacitor v8 跨平台说明](https://capacitorjs.com/docs)、[Apple 本地网络隐私](https://developer.apple.com/documentation/Technotes/tn3179-understanding-local-network-privacy)、[Android 本地网络权限](https://developer.android.com/privacy-and-security/local-network-permission)。
 
-## 实施顺序
+## 后续实施顺序
 
-1. 把本地牌局动作改造成纯 reducer，并为每个动作补充确定性同步测试。
-2. 定义消息协议与房主侧权威校验，先用桌面 Node 测试服务模拟三台客户端。
-3. 实现 Android 房主插件、二维码加入、心跳和快照恢复，再完成两台 Android 真机互联。
+1. 已完成：纯 reducer、确定性同步测试、消息协议、桌面 Node 权威服务、三客户端联机冒烟测试。
+2. 完善当前 Beta：房间内退出确认、掉线超时托管、同局再来一盘和弱网提示。
+3. 实现 Android 房主插件、二维码加入和快照恢复，再完成多台 Android 真机互联。
 4. 添加 iOS 工程和 Swift 房主插件，配置本地网络隐私说明与 Bonjour 服务。
 5. 完成 Android ↔ iPhone、iPhone ↔ iPhone、弱网重连、来电切后台、拒绝权限等测试矩阵。
 

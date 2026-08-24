@@ -48,16 +48,33 @@ const rows = [];
 const started = performance.now();
 for (const [strong, weak] of pairs) {
   let strongWins = 0;
+  let strongLandlordWins = 0;
+  let strongFarmerWins = 0;
   let matches = 0;
   for (const seed of seeds) {
     const strongLandlordWinner = simulate(`${seed}-landlord`, [strong, weak, weak]);
+    strongLandlordWins += strongLandlordWinner === 0 ? 1 : 0;
     strongWins += strongLandlordWinner === 0 ? 1 : 0;
     matches += 1;
     const strongFarmerWinner = simulate(`${seed}-farmer`, [weak, strong, strong]);
+    strongFarmerWins += strongFarmerWinner !== 0 ? 1 : 0;
     strongWins += strongFarmerWinner !== 0 ? 1 : 0;
     matches += 1;
   }
-  rows.push({ matchup: `${strong} > ${weak}`, strongWins, matches, rate: `${Math.round(strongWins / matches * 100)}%` });
+  rows.push({
+    matchup: `${strong} > ${weak}`,
+    landlord: `${strongLandlordWins}/${seeds.length}`,
+    farmers: `${strongFarmerWins}/${seeds.length}`,
+    strongWins,
+    matches,
+    rate: `${Math.round(strongWins / matches * 100)}%`,
+  });
 }
 console.table(rows);
 console.log(`Completed ${rows.reduce((sum, row) => sum + row.matches, 0)} public-information games in ${Math.round(performance.now() - started)}ms.`);
+const minimumRate = 0.55;
+const failures = rows.filter((row) => row.strongWins / row.matches < minimumRate);
+if (failures.length) {
+  console.error(`AI strength gate failed: ${failures.map((row) => `${row.matchup} ${row.rate}`).join(', ')}; expected at least ${Math.round(minimumRate * 100)}%.`);
+  process.exitCode = 1;
+}

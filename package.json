@@ -1,7 +1,7 @@
 {
   "name": "token-landlords",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -9,21 +9,25 @@
     "android:sync": "cap sync android",
     "android:build": "android\\gradlew.bat -p android assembleDebug",
     "android:open": "cap open android",
+    "lan:serve": "node server/lanServer.mjs",
+    "smoke:lan": "node scripts/lanSmoke.mjs",
     "benchmark:ai": "node scripts/aiBenchmark.mjs",
+    "smoke:ui": "node scripts/uiSmoke.mjs",
     "test": "node --test",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
-    "@capacitor/android": "^8.5.0",
-    "@capacitor/app": "^8.1.1",
-    "@capacitor/core": "^8.5.0",
-    "@capacitor/haptics": "^8.0.2",
-    "@vitejs/plugin-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "vite": "latest"
+    "@capacitor/android": "8.5.0",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/core": "8.5.0",
+    "@capacitor/haptics": "8.0.2",
+    "@vitejs/plugin-react": "6.1.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "8.2.2",
+    "ws": "8.21.3"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.5.0"
+    "@capacitor/cli": "8.5.0"
   }
 }

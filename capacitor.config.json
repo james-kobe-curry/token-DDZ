@@ -6,7 +6,8 @@
     "androidScheme": "https"
   },
   "android": {
-    "backgroundColor": "#071b16"
+    "backgroundColor": "#071b16",
+    "allowMixedContent": true
   },
   "plugins": {
     "SystemBars": {

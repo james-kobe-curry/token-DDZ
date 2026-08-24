@@ -1472,3 +1472,127 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
 @media (orientation: portrait) {
   .native-platform body::after { content: '请旋转手机，横屏体验牌局'; position: fixed; z-index: 9999; inset: 0; display: grid; place-items: center; padding: 24px; color: #f3daa4; background: radial-gradient(circle at 50% 42%, #174a37, #071b16 70%); font-size: 18px; font-weight: 700; letter-spacing: .08em; text-align: center; }
 }
+
+/* LAN friend room ------------------------------------------------------- */
+.lan-lobby,
+.lan-result { min-height: 100dvh; position: relative; isolation: isolate; overflow: hidden; display: grid; place-items: center; padding: 32px; background: radial-gradient(circle at 50% 26%, rgba(48,142,99,.28), transparent 37%), radial-gradient(circle at 12% 85%, rgba(157,47,43,.16), transparent 28%), linear-gradient(145deg,#0f2f25,#081713 68%); }
+.lan-lobby::before,
+.lan-result::before { content: ''; position: absolute; z-index: -2; inset: 0; opacity: .12; background-image: linear-gradient(30deg, transparent 48%, rgba(235,203,137,.16) 49%, rgba(235,203,137,.16) 51%, transparent 52%), linear-gradient(150deg, transparent 48%, rgba(235,203,137,.11) 49%, rgba(235,203,137,.11) 51%, transparent 52%); background-size: 82px 48px; mask-image: linear-gradient(to bottom, black, transparent 86%); }
+.lan-lobby-glow { position: absolute; z-index: -1; width: 720px; aspect-ratio: 1; border: 1px solid rgba(224,190,119,.12); border-radius: 50%; box-shadow: 0 0 0 90px rgba(230,194,117,.02),0 0 0 180px rgba(230,194,117,.015); animation: lanBreathe 5s ease-in-out infinite; }
+.lan-connect-card { width: min(680px,100%); min-height: 520px; position: relative; padding: 44px 54px 28px; border: 1px solid rgba(228,196,126,.28); border-radius: 30px; text-align: center; background: linear-gradient(150deg,rgba(29,67,53,.92),rgba(10,29,23,.96)); box-shadow: 0 42px 100px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.08); backdrop-filter: blur(22px); }
+.lan-connect-card::before { content: ''; position: absolute; inset: 9px; pointer-events: none; border: 1px solid rgba(232,202,139,.09); border-radius: 22px; }
+.lan-close { position: absolute; z-index: 2; top: 20px; right: 20px; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.1); border-radius: 50%; color: #b7c9c0; background: rgba(255,255,255,.035); cursor: pointer; }
+.lan-connect-card > .room-seal { width: 58px; height: 58px; margin: auto; border-radius: 12px; font-size: 27px; }
+.lan-connect-card > small { display: block; margin-top: 18px; color: #d5b975; font-size: 10px; font-weight: 800; letter-spacing: .22em; }
+.lan-connect-card h1 { margin: 8px 0 10px; color: #fff6e2; font-family: ui-serif,'Songti SC',serif; font-size: clamp(30px,5vw,44px); letter-spacing: .06em; }
+.lan-connect-card > p { max-width: 510px; margin: 0 auto 25px; color: #a9bbb2; font-size: 14px; line-height: 1.75; }
+.lan-field { display: block; text-align: left; }
+.lan-field span { display: block; margin: 0 0 8px 5px; color: #d9cba9; font-size: 12px; font-weight: 700; }
+.lan-field input,
+.lan-create-row input { height: 48px; border: 1px solid rgba(231,201,138,.18); border-radius: 13px; outline: 0; color: #f2f7f4; background: rgba(0,0,0,.18); transition: border-color .2s,box-shadow .2s; }
+.lan-field input { width: 100%; padding: 0 16px; }
+.lan-field input:focus,
+.lan-create-row input:focus { border-color: rgba(120,224,170,.65); box-shadow: 0 0 0 3px rgba(102,215,156,.1); }
+.lan-native-note { margin: 9px 5px 0 !important; color: #9dafaa !important; font-size: 10px !important; line-height: 1.5; letter-spacing: 0 !important; text-align: left; }
+.lan-create-row { margin-top: 18px; display: grid; grid-template-columns: auto 24px minmax(130px,1fr) auto; align-items: center; gap: 10px; }
+.lan-create-row > i { color: #6f877c; font-size: 11px; font-style: normal; }
+.lan-create-row input { min-width: 0; padding: 0 14px; text-align: center; font-size: 15px; font-weight: 800; letter-spacing: .16em; }
+.lan-reconnect { margin-top: 16px; border: 0; color: #85daa9; background: none; font-size: 12px; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.lan-code { margin: 22px auto; padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 18px; border: 1px solid rgba(231,199,128,.15); border-radius: 16px; background: rgba(0,0,0,.14); }
+.lan-code span { color: #8fa79c; font-size: 11px; }
+.lan-code b { color: #f0d38d; font-size: 27px; letter-spacing: .18em; }
+.lan-code button { border: 0; color: #8bdcb0; background: none; font-size: 11px; cursor: pointer; }
+.lan-player-list { display: grid; gap: 8px; }
+.lan-player-list > div { min-height: 62px; padding: 8px 15px; display: grid; grid-template-columns: 36px 1fr 24px; align-items: center; gap: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 15px; text-align: left; background: rgba(255,255,255,.025); }
+.lan-player-list > div.ready { border-color: rgba(104,220,159,.22); background: rgba(85,199,139,.065); }
+.lan-player-list > div > i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #e5cb91; background: #173a2e; font-style: normal; font-weight: 800; }
+.lan-player-list span { display: flex; flex-direction: column; }
+.lan-player-list strong { color: #eff5f1; font-size: 14px; }
+.lan-player-list small { margin-top: 4px; color: #859c91; font-size: 10px; }
+.lan-player-list svg { color: #75dba5; }
+.lan-ready { width: 100%; min-height: 50px; margin-top: 18px; font-size: 15px; }
+.lan-connect-card > footer { min-height: 23px; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #81988d; font-size: 10px; }
+.lan-connect-card > footer b { margin-left: 6px; color: #e98d83; font-weight: 600; }
+.connection-dot { width: 7px; height: 7px; border-radius: 50%; background: #65766e; }
+.connection-dot.connected { background: #6ee2a4; box-shadow: 0 0 10px #6ee2a4; }
+.connection-dot.connecting { background: #e9c66f; animation: lanBreathe 1s infinite; }
+.connection-dot.error { background: #e45e60; }
+
+.lan-game { --lan-gold:#dfba6a; width:100vw; height:100dvh; min-height:560px; position:relative; overflow:hidden; color:#f5eee0; background:radial-gradient(circle at 50% 46%,#2d7359 0,#174d3b 43%,#08251d 76%),#09251d; }
+.lan-game::before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.18; background-image:linear-gradient(90deg,transparent 49%,rgba(240,210,149,.12) 50%,transparent 51%),linear-gradient(0deg,transparent 49%,rgba(240,210,149,.08) 50%,transparent 51%); background-size:64px 64px; mask-image:radial-gradient(ellipse at center,black,transparent 72%); }
+.lan-game-header { height:64px; position:relative; z-index:20; padding:0 max(20px,env(safe-area-inset-right)) 0 max(20px,env(safe-area-inset-left)); display:flex; align-items:center; gap:18px; border-bottom:1px solid rgba(230,197,128,.17); background:rgba(6,25,19,.76); backdrop-filter:blur(17px); }
+.lan-game-header > div { margin-right:auto; display:flex; flex-direction:column; }
+.lan-game-header small { color:#8da89a; font-size:9px; letter-spacing:.08em; }
+.lan-game-header strong { margin-top:3px; color:#e9d2a0; font-size:14px; }
+.lan-game-header > span { min-width:76px; display:flex; flex-direction:column; align-items:center; }
+.lan-game-header > span b { margin-top:2px; color:#f4dfad; font-size:14px; }
+.lan-table { height:calc(100% - 64px); position:relative; isolation:isolate; }
+.lan-table .table-surface { width:min(87vw,1320px); height:min(72vh,700px); min-height:430px; position:absolute; z-index:-1; left:50%; top:47%; transform:translate(-50%,-50%); border:clamp(12px,1.5vw,22px) solid #5d351f; border-radius:48%; background:radial-gradient(ellipse at center,#31775d,#14503c 72%); box-shadow:0 38px 80px rgba(0,0,0,.5),inset 0 0 0 3px rgba(245,205,125,.38),inset 0 0 85px rgba(0,0,0,.2); }
+.lan-table .table-ring { position:absolute; inset:18px; border:1px solid rgba(233,204,142,.13); border-radius:48%; }
+.lan-table .table-logo { position:absolute; left:50%; top:43%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; color:rgba(239,211,151,.16); }
+.lan-table .table-logo b { font-family:ui-serif,'Songti SC',serif; font-size:96px; line-height:1; }
+.lan-table .table-logo span { font-size:9px; letter-spacing:.32em; }
+.lan-seat,.lan-self-seat { position:absolute; z-index:6; display:flex; align-items:center; gap:10px; border:1px solid rgba(227,199,140,.15); border-radius:16px; background:rgba(7,31,24,.72); box-shadow:0 13px 25px rgba(0,0,0,.2); transition:border-color .25s,box-shadow .25s,transform .25s; }
+.lan-seat { top:20%; min-width:172px; padding:10px; }
+.lan-seat-left { left:3.5%; }
+.lan-seat-right { right:3.5%; flex-direction:row-reverse; text-align:right; }
+.lan-seat.active,.lan-self-seat.active { border-color:rgba(242,202,112,.78); box-shadow:0 0 0 3px rgba(231,190,99,.09),0 0 28px rgba(229,188,94,.22); animation:lanActive 1.8s ease-in-out infinite; }
+.lan-avatar { width:52px; height:52px; flex:none; display:grid; place-items:center; border-radius:15px; color:#f4dca7; background:linear-gradient(145deg,#9c4037,#4f1919); box-shadow:inset 0 0 0 2px rgba(244,202,124,.2); font-size:21px; font-weight:800; }
+.lan-seat > span:nth-child(2) { display:flex; flex-direction:column; }
+.lan-seat strong { font-size:13px; }
+.lan-seat small,.lan-self-seat small { margin-top:5px; color:#9eb1a7; font-size:9px; }
+.lan-seat > i { position:absolute; top:-11px; right:-7px; padding:3px 7px; border:1px solid #d6a64f; border-radius:8px; color:#50220e; background:linear-gradient(#f4d78f,#c68d35); font-size:9px; font-style:normal; font-weight:900; }
+.lan-bottom-cards { position:absolute; z-index:5; left:50%; top:8px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; }
+.lan-bottom-cards > strong { color:#ddc58f; font-size:10px; }
+.lan-bottom-cards > div { min-width:108px; height:52px; padding:4px 7px; display:flex; justify-content:center; gap:5px; border:1px solid rgba(231,199,128,.12); border-radius:10px; background:rgba(4,24,18,.34); }
+.lan-bottom-cards .poker-card.compact { width:31px; height:43px; pointer-events:none; }
+.lan-bottom-cards .compact .card-rank { font-size:9px; }
+.lan-bottom-cards .compact .card-suit { font-size:7px; }
+.lan-bottom-cards .compact .card-center { font-size:11px; }
+.lan-bottom-cards > div > i { width:29px; height:42px; display:grid; place-items:center; border:1px solid rgba(234,201,131,.38); border-radius:5px; color:#d9b96d; background:#123d2d; font-size:10px; font-style:normal; }
+.lan-center-play { min-width:260px; position:absolute; z-index:5; left:50%; top:39%; transform:translate(-50%,-50%); text-align:center; }
+.lan-center-play > small { display:block; margin-bottom:10px; color:#e6cf9c; font-size:11px; }
+.lan-center-play > strong { color:rgba(239,220,178,.72); font-family:ui-serif,'Songti SC',serif; font-size:19px; letter-spacing:.1em; }
+.lan-center-play > div { min-height:82px; display:flex; justify-content:center; padding-right:28px; }
+.lan-center-play .poker-card { width:58px; height:82px; margin-right:-28px; padding:6px; pointer-events:none; box-shadow:-4px 8px 12px rgba(0,0,0,.28); }
+.lan-center-play .card-rank { font-size:15px; }.lan-center-play .card-suit { font-size:10px; }.lan-center-play .card-center { font-size:20px; }
+.lan-self-seat { left:max(3%,env(safe-area-inset-left)); bottom:14px; padding:8px 13px; flex-direction:column; align-items:flex-start; }
+.lan-self-seat span { color:#f1dba8; font-size:12px; font-weight:800; }
+.lan-actions { min-height:50px; position:absolute; z-index:14; left:50%; bottom:145px; transform:translateX(-50%); display:flex; align-items:center; justify-content:center; gap:9px; white-space:nowrap; }
+.lan-actions > span { padding:11px 20px; border:1px solid rgba(231,199,128,.13); border-radius:20px; color:#d5c49f; background:rgba(5,27,20,.72); font-size:12px; }
+.lan-actions button { min-width:82px; height:43px; padding:0 16px; border:1px solid rgba(233,211,167,.19); border-radius:14px; color:#eadfca; background:linear-gradient(#234d3b,#15372b); box-shadow:0 8px 17px rgba(0,0,0,.23),inset 0 1px rgba(255,255,255,.06); font-size:12px; font-weight:800; cursor:pointer; transition:transform .16s,filter .16s; }
+.lan-actions button:hover:not(:disabled) { transform:translateY(-2px); filter:brightness(1.08); }
+.lan-actions button.primary { min-width:128px; border-color:#edc775; color:#3b250b; background:linear-gradient(145deg,#f4d68c,#c99036); box-shadow:0 10px 23px rgba(182,120,37,.27),inset 0 1px rgba(255,255,255,.55); }
+.lan-notice { position:absolute; z-index:18; left:50%; bottom:202px; transform:translateX(-50%); padding:8px 15px; border:1px solid rgba(238,204,134,.2); border-radius:18px; color:#f1deb3; background:rgba(70,34,25,.85); box-shadow:0 9px 22px rgba(0,0,0,.24); font-size:10px; }
+.lan-hand { width:min(82vw,1050px); height:126px; position:absolute; z-index:10; left:50%; bottom:4px; transform:translateX(-50%); display:flex; align-items:flex-end; justify-content:center; padding-right:clamp(44px,calc((var(--hand-count) - 10) * 4px),76px); touch-action:pan-y; }
+.lan-hand .poker-card { width:78px; height:112px; margin-right:clamp(-51px,calc((var(--hand-count) - 10) * -2.25px),-27px); padding:8px; }
+.lan-hand .poker-card.selected { transform:translateY(-20px); z-index:30; }
+.lan-result > div { width:min(520px,100%); padding:50px; border:1px solid rgba(230,195,124,.25); border-radius:28px; text-align:center; background:rgba(13,45,34,.88); box-shadow:0 35px 80px rgba(0,0,0,.4); }
+.lan-result .room-seal { width:62px;height:62px;margin:auto;font-size:28px; }
+.lan-result small { display:block;margin-top:20px;color:#d3b879;letter-spacing:.16em; }
+.lan-result h1 { margin:10px 0;color:#fff0c9;font-family:ui-serif,'Songti SC',serif;font-size:44px; }
+.lan-result p { margin:0 0 24px;color:#a9bbb2; }
+@keyframes lanBreathe { 50% { opacity:.58; transform:scale(1.02); } }
+@keyframes lanActive { 50% { box-shadow:0 0 0 5px rgba(231,190,99,.06),0 0 36px rgba(229,188,94,.28); } }
+
+@media (orientation:landscape) and (max-height:720px) {
+  .lan-game { min-height:0; }
+  .lan-game-header { height:48px; padding-inline:max(10px,env(safe-area-inset-left)); gap:8px; }
+  .lan-game-header .icon-btn { width:31px;height:31px; }.lan-game-header > span { min-width:56px; }.lan-game-header small { font-size:7px; }.lan-game-header strong,.lan-game-header > span b { font-size:10px; }
+  .lan-table { height:calc(100% - 48px); }
+  .lan-table .table-surface { width:92vw;height:78vh;min-height:0;top:45%;border-width:10px; }
+  .lan-seat { top:15%;min-width:120px;padding:5px;border-radius:11px;gap:6px; }.lan-seat-left { left:max(1.5%,env(safe-area-inset-left)); }.lan-seat-right { right:max(1.5%,env(safe-area-inset-right)); }
+  .lan-avatar { width:38px;height:38px;border-radius:10px;font-size:15px; }.lan-seat strong { font-size:9px; }.lan-seat small { font-size:7px;margin-top:2px; }
+  .lan-bottom-cards { top:2px; }.lan-bottom-cards > strong { display:none; }.lan-bottom-cards > div { height:39px;min-width:92px;padding:2px 5px; }.lan-bottom-cards .poker-card.compact,.lan-bottom-cards > div > i { width:25px;height:34px; }
+  .lan-center-play { top:36%;min-width:200px; }.lan-center-play > small { margin-bottom:4px;font-size:8px; }.lan-center-play > div { min-height:62px; }.lan-center-play .poker-card { width:45px;height:63px;margin-right:-23px;padding:4px; }.lan-center-play .card-rank { font-size:12px; }.lan-center-play .card-suit { font-size:8px; }.lan-center-play .card-center { font-size:15px; }
+  .lan-self-seat { left:max(5px,env(safe-area-inset-left));bottom:max(3px,env(safe-area-inset-bottom));padding:5px 8px; }.lan-self-seat span { font-size:9px; }.lan-self-seat small { font-size:7px;margin-top:2px; }
+  .lan-actions { bottom:90px;gap:5px; }.lan-actions button { min-width:60px;height:35px;padding-inline:10px;border-radius:10px;font-size:9px; }.lan-actions button.primary { min-width:96px; }.lan-actions > span { padding:8px 14px;font-size:9px; }
+  .lan-notice { bottom:131px;padding:5px 10px;font-size:8px; }
+  .lan-hand { width:min(83vw,860px);height:88px;bottom:0;padding-right:clamp(34px,calc((var(--hand-count) - 10) * 3px),56px); }
+  .lan-hand .poker-card { width:58px;height:84px;margin-right:clamp(-40px,calc((var(--hand-count) - 10) * -1.8px),-20px);padding:5px; }.lan-hand .poker-card.selected { transform:translateY(-14px); }.lan-hand .card-rank { font-size:16px; }.lan-hand .card-suit { font-size:10px; }.lan-hand .card-center { font-size:21px; }
+  .lan-connect-card { min-height:0;max-height:calc(100dvh - 14px);overflow:auto;padding:20px 40px 13px;border-radius:20px; }.lan-connect-card > .room-seal { width:38px;height:38px;font-size:18px; }.lan-connect-card > small { margin-top:7px;font-size:7px; }.lan-connect-card h1 { margin:3px 0 5px;font-size:25px; }.lan-connect-card > p { margin-bottom:10px;font-size:10px;line-height:1.45; }.lan-field span { margin-bottom:4px;font-size:9px; }.lan-field input,.lan-create-row input { height:36px; }.lan-create-row { margin-top:9px; }.lan-create-row .btn { min-height:36px; }.lan-reconnect { margin-top:8px; }.lan-connect-card > footer { margin-top:8px; }.lan-code { margin:7px auto;padding:6px 12px; }.lan-code b { font-size:19px; }.lan-player-list { gap:4px; }.lan-player-list > div { min-height:39px;padding:3px 10px; }.lan-player-list > div > i { width:27px;height:27px; }.lan-player-list small { margin-top:1px; }.lan-ready { min-height:37px;margin-top:8px; }
+}
+
+@media (max-width:620px) and (orientation:portrait) {
+  .lan-lobby { padding:14px; }.lan-connect-card { padding:34px 20px 20px;border-radius:23px; }.lan-create-row { grid-template-columns:1fr 1fr; }.lan-create-row > i { display:none; }.lan-create-row input { grid-column:1; }.lan-create-row > button:last-child { grid-column:2; }.lan-connect-card > .room-seal { width:48px;height:48px; }.lan-code { gap:9px; }.lan-code b { font-size:21px; }
+}
