@@ -14,7 +14,7 @@ const browserCandidates = [
 const browserPath = browserCandidates.find((candidate) => existsSync(candidate));
 if (!browserPath) throw new Error('Set BROWSER_PATH to a Chromium or Edge executable before running smoke:ui');
 
-const baseUrl = process.env.SMOKE_URL || 'http://localhost:4173';
+const baseUrl = process.env.SMOKE_URL || 'http://localhost:5173';
 const lanUrl = process.env.SMOKE_LAN_URL || '';
 const port = 9337;
 const profile = join(tmpdir(), `token-landlords-smoke-${Date.now()}`);
