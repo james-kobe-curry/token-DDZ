@@ -25,6 +25,11 @@ export const rankValue = (rank) => {
   return index >= 0 ? index + 3 : rank === 'SJ' ? 16 : 17;
 };
 
+// Seats are rendered as player 0 at the bottom, player 1 on the left and
+// player 2 on the right. Counter-clockwise play therefore advances
+// bottom -> right -> left -> bottom.
+export const nextPlayerCounterClockwise = (player) => (player + 2) % 3;
+
 export function createDeck() {
   const cards = [];
   for (const rank of RANKS) {
@@ -590,7 +595,7 @@ export function rankStrategicOptions(hand, previous = null, context = {}, diffic
     const structureSafe = options.filter((cards) => structuralDamageCost(hand, cards) === 0 || removeCards(hand, cards).length === 0);
     if (structureSafe.length) options = structureSafe;
   }
-  const nextPlayer = currentPlayer === null ? null : (currentPlayer + 1) % 3;
+  const nextPlayer = currentPlayer === null ? null : nextPlayerCounterClockwise(currentPlayer);
   const teammateClosing = nextPlayer !== null && sameTeam(currentPlayer, nextPlayer, landlord) && (handSizes[nextPlayer] ?? 99) <= 2;
   const memory = buildCardMemory(hand, seenCards, publicCards, profile);
   const planner = profile.planningHandLimit && hand.length <= profile.planningHandLimit ? createEndgamePlanner(profile.nodeLimit) : null;
@@ -826,7 +831,7 @@ export function rankStrategicActions(hand, previous = null, context = {}, diffic
   const { currentPlayer = null, landlord = null, lastPlayer = previous.player ?? null, handSizes = [] } = context;
   const teammateHasLead = sameTeam(currentPlayer, lastPlayer, landlord);
   const landlordThreat = landlord !== null && landlord !== undefined && (handSizes[landlord] ?? 99) <= 2;
-  const landlordActsNext = currentPlayer !== null && landlord === (currentPlayer + 1) % 3;
+  const landlordActsNext = currentPlayer !== null && landlord === nextPlayerCounterClockwise(currentPlayer);
   const mustTakeOver = teammateHasLead && landlordThreat && landlordActsNext && ['single', 'pair'].includes(previous.type);
   const opposingPlayers = handSizes.map((_, player) => player).filter((player) => player !== currentPlayer && !sameTeam(currentPlayer, player, landlord));
   const opponentThreat = opposingPlayers.some((player) => (handSizes[player] ?? 99) <= 2);

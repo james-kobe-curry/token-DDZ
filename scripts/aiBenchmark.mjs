@@ -1,4 +1,4 @@
-import { analyzeAiDecision, classifyPlay, dealWithSeed, removeCards } from '../src/gameLogic.js';
+import { analyzeAiDecision, classifyPlay, dealWithSeed, nextPlayerCounterClockwise, removeCards } from '../src/gameLogic.js';
 
 function simulate(seed, levels) {
   const dealt = dealWithSeed(seed);
@@ -28,7 +28,7 @@ function simulate(seed, levels) {
       lastActor = current;
       passCount = 0;
       if (!hands[current].length) return current;
-      current = (current + 1) % 3;
+      current = nextPlayerCounterClockwise(current);
     } else {
       if (!lastPlay) throw new Error(`${levels[current]} passed while holding the lead`);
       passCount += 1;
@@ -36,7 +36,7 @@ function simulate(seed, levels) {
         current = lastActor;
         lastPlay = null;
         passCount = 0;
-      } else current = (current + 1) % 3;
+      } else current = nextPlayerCounterClockwise(current);
     }
   }
   throw new Error(`simulation exceeded turn limit for ${seed}`);

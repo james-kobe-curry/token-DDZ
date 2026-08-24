@@ -16,6 +16,7 @@ import {
   GAME_RULES,
   matchLikelyPlay,
   matchLikelyOptions,
+  nextPlayerCounterClockwise,
   recommendStrategicPlay,
   rankValue,
   rankStrategicActions,
@@ -31,6 +32,12 @@ function cards(spec) {
     key: rank.includes('J') ? 'joker' : 'spade',
   })));
 }
+
+test('座位轮转始终按逆时针：自己到右侧，再到左侧', () => {
+  assert.equal(nextPlayerCounterClockwise(0), 2);
+  assert.equal(nextPlayerCounterClockwise(2), 1);
+  assert.equal(nextPlayerCounterClockwise(1), 0);
+});
 
 test('同一个种子始终产生同一副牌', () => {
   const first = dealWithSeed('token-landlords-test');
@@ -138,7 +145,7 @@ test('农民不会无意义压过队友', () => {
 
 test('农民拥有牌权时会给下家报单队友输送低单张', () => {
   const hand = cards([['3', 1], ['6', 2], ['K', 1]]);
-  const play = chooseAiPlay(hand, null, { currentPlayer: 1, landlord: 0, handSizes: [7, 4, 1] });
+  const play = chooseAiPlay(hand, null, { currentPlayer: 2, landlord: 0, handSizes: [7, 1, 4] });
   assert.equal(classifyPlay(play).type, 'single');
   assert.equal(play[0].rank, '3');
 });
@@ -146,7 +153,7 @@ test('农民拥有牌权时会给下家报单队友输送低单张', () => {
 test('地主报单且将在下家行动时农民会主动接过队友牌权封堵', () => {
   const hand = cards([['6', 1], ['A', 1]]);
   const target = classifyPlay(cards([['5', 1]]));
-  const play = chooseAiPlay(hand, target, { currentPlayer: 2, landlord: 0, lastPlayer: 1, handSizes: [1, 5, 2] });
+  const play = chooseAiPlay(hand, target, { currentPlayer: 1, landlord: 0, lastPlayer: 2, handSizes: [1, 2, 5] });
   assert.equal(play[0].rank, 'A');
 });
 

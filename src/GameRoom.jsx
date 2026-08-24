@@ -16,6 +16,7 @@ import {
   findBestGesturePlay,
   GAME_RULES,
   matchLikelyOptions,
+  nextPlayerCounterClockwise,
   playNames,
   rankStrategicActions,
   removeCards,
@@ -647,7 +648,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
       const actionText = score ? `叫${score}分` : '不叫';
       const name = player === 0 ? '你' : BOT_NAMES[player - 1];
       const next = withReplayFrame(
-        { ...state, highestBid, highestBidder, bidCount, current: (player + 1) % 3, turnSerial: (state.turnSerial || 0) + 1, bids: [...state.bids, { player, score }], trail: [...(state.trail || []), { player, text: actionText, key: `${Date.now()}-${player}` }].slice(-4), logs: [`${name} ${score ? `叫 ${score} 分` : '不叫'}`, ...state.logs] },
+        { ...state, highestBid, highestBidder, bidCount, current: nextPlayerCounterClockwise(player), turnSerial: (state.turnSerial || 0) + 1, bids: [...state.bids, { player, score }], trail: [...(state.trail || []), { player, text: actionText, key: `${Date.now()}-${player}` }].slice(-4), logs: [`${name} ${score ? `叫 ${score} 分` : '不叫'}`, ...state.logs] },
         { actor: player, label: `${name} · ${score ? `叫 ${score} 分` : '不叫'}`, type: 'bid' },
       );
       if (score === 3) return finishBid(next, player);
@@ -708,7 +709,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
         ...state, hands, multiplier, winner, spring, playCounts,
         playedCards: [...(state.playedCards || []), ...cards],
         phase: winner === null ? 'playing' : 'ended',
-        current: winner === null ? (player + 1) % 3 : player,
+        current: winner === null ? nextPlayerCounterClockwise(player) : player,
         turnSerial: (state.turnSerial || 0) + 1,
         lastPlay: { ...combo, cards, player }, lastActor: player, passCount: 0,
         trail: [...(state.trail || []), { player, text: playNames[combo.type], key: `${Date.now()}-${player}` }].slice(-4),
@@ -749,7 +750,7 @@ export default function GameRoom({ ranked, profile, onExit, onFinish }) {
         );
       }
       return withReplayFrame(
-        { ...state, current: (player + 1) % 3, turnSerial: (state.turnSerial || 0) + 1, passCount, trail: [...(state.trail || []), { player, text: '不出', key: `${Date.now()}-${player}` }].slice(-4), logs: [`${name} 不出`, ...state.logs] },
+        { ...state, current: nextPlayerCounterClockwise(player), turnSerial: (state.turnSerial || 0) + 1, passCount, trail: [...(state.trail || []), { player, text: '不出', key: `${Date.now()}-${player}` }].slice(-4), logs: [`${name} 不出`, ...state.logs] },
         { actor: player, label: `${name} · 不出`, type: 'pass' },
       );
     });
