@@ -1241,7 +1241,7 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
     vibrate(6);
   };
   const startCardDrag = (event, id) => {
-    if (game.phase !== 'playing' || event.button !== 0) return;
+    if (game.phase !== 'playing' || (event.pointerType !== 'touch' && event.button !== 0)) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const shouldSelect = !selected.includes(id);

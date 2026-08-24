@@ -144,7 +144,7 @@ function LanMatch({ room, client, onExit }) {
   }, [game.phase, game.selfHand, game.lastPlay, selected, selectedCards, selectedCombo]);
 
   const startCardDrag = (event, id) => {
-    if (game.phase !== 'playing' || event.button !== 0) return;
+    if (game.phase !== 'playing' || (event.pointerType !== 'touch' && event.button !== 0)) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     const selecting = !selected.includes(id);

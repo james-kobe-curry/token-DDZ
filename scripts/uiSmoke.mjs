@@ -89,10 +89,12 @@ try {
   await waitFor("Boolean(document.querySelector('.player-hand.preselect-enabled:not(.input-locked)'))", 'waiting hand did not become interactive');
   const points = await evaluate(`(() => {
     const cards = [...document.querySelectorAll('.player-hand [data-card-id]')];
-    const start = cards[4].getBoundingClientRect();
-    const end = cards[11].getBoundingClientRect();
-    const y = Math.min(innerHeight - 12, Math.max(start.top, end.top) + 25);
-    return { ax: start.left + 5, ay: y, bx: end.left + 5, by: y };
+    const start = cards[3].getBoundingClientRect();
+    const end = cards[10].getBoundingClientRect();
+    const visibleTop = Math.max(0, start.top, end.top);
+    const visibleBottom = Math.min(innerHeight, start.bottom, end.bottom);
+    const y = visibleTop + Math.min(24, Math.max(6, (visibleBottom - visibleTop) / 3));
+    return { ax: start.left + Math.min(8, start.width / 4), ay: y, bx: end.left + Math.min(8, end.width / 4), by: y };
   })()`);
   await command('Input.dispatchMouseEvent', { type: 'mousePressed', x: points.ax, y: points.ay, button: 'left', buttons: 1, clickCount: 1 });
   for (let step = 1; step <= 12; step += 1) {
@@ -125,8 +127,7 @@ try {
 
   let lanRoom = null;
   if (lanUrl) {
-    await evaluate("localStorage.removeItem('token-landlords:active-match:v1'); true");
-    await command('Page.navigate', { url: `${baseUrl}/` });
+    await evaluate("document.querySelector('.room-brand .icon-btn')?.click(); true");
     await waitFor("Boolean(document.querySelector('.mode-card.friend'))", 'friend room entry did not render');
     await evaluate("document.querySelector('.mode-card.friend').click(); true");
     await waitFor("Boolean(document.querySelector('.lan-lobby'))", 'LAN lobby did not open');
