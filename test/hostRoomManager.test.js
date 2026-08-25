@@ -50,3 +50,17 @@ test('安卓房主引擎使用重连令牌恢复原座位', async () => {
   assert.equal(manager.snapshot(host.code, host.token).players[1].connected, true);
   assert.throws(() => manager.reconnect({ code: host.code, token: 'invalid' }), (error) => error.code === 'INVALID_SESSION');
 });
+
+test('安卓房主不会让已准备但掉线的座位启动牌局', async () => {
+  const manager = new HostRoomManager();
+  const host = manager.createRoom({ name: '房主' });
+  const guestA = manager.joinRoom({ code: host.code, name: '玩家甲' });
+  const guestB = manager.joinRoom({ code: host.code, name: '玩家乙' });
+  await manager.setReady(host.code, host.token, true);
+  await manager.setReady(host.code, guestA.token, true);
+  manager.disconnect(host.code, guestA.token);
+  await manager.setReady(host.code, guestB.token, true);
+  const view = manager.snapshot(host.code, host.token);
+  assert.equal(view.game, null);
+  assert.equal(view.players[1].ready, false);
+});

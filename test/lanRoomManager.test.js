@@ -49,3 +49,48 @@ test('重连令牌恢复原座位，错误令牌不能读取房间', () => {
   assert.equal(manager.snapshot(host.code, host.token).players[1].connected, true);
   assert.throws(() => manager.reconnect({ code: host.code, token: 'wrong' }), (error) => error.code === 'INVALID_SESSION');
 });
+
+test('已准备玩家掉线后不会带着离线座位开局', () => {
+  const manager = new LanRoomManager();
+  const host = manager.createRoom({ name: '房主' });
+  const guestA = manager.joinRoom({ code: host.code, name: '玩家甲' });
+  const guestB = manager.joinRoom({ code: host.code, name: '玩家乙' });
+  manager.setReady(host.code, host.token, true);
+  manager.setReady(host.code, guestA.token, true);
+  manager.disconnect(host.code, guestA.token);
+  manager.setReady(host.code, guestB.token, true);
+  const view = manager.snapshot(host.code, host.token);
+  assert.equal(view.game, null);
+  assert.equal(view.players[1].ready, false);
+  assert.equal(view.players[1].connected, false);
+});
+
+test('权威回合超时后由公开信息 AI 托管并推进版本', () => {
+  let now = 1000;
+  const manager = new LanRoomManager({ now: () => now });
+  const host = manager.createRoom({ name: '房主' });
+  const guestA = manager.joinRoom({ code: host.code, name: '玩家甲' });
+  const guestB = manager.joinRoom({ code: host.code, name: '玩家乙' });
+  manager.setReady(host.code, host.token, true);
+  manager.setReady(host.code, guestA.token, true);
+  manager.setReady(host.code, guestB.token, true);
+  const before = manager.snapshot(host.code, host.token).game;
+  now = before.turnDeadline + 1;
+  assert.deepEqual(manager.tick(), [host.code]);
+  const after = manager.snapshot(host.code, host.token).game;
+  assert.equal(after.stateVersion, 1);
+  assert.equal(after.lastAction.automated, true);
+  assert.ok(after.turnDeadline > now);
+});
+
+test('三名玩家确认后可在原房间开始下一局', () => {
+  const { manager, host, guestA, guestB } = readyRoom();
+  manager.rooms.get(host.code).game.phase = 'ended';
+  manager.setRematch(host.code, host.token, true);
+  manager.setRematch(host.code, guestA.token, true);
+  assert.equal(manager.snapshot(host.code, host.token).players.filter((player) => player.rematchReady).length, 2);
+  manager.setRematch(host.code, guestB.token, true);
+  const next = manager.snapshot(host.code, host.token);
+  assert.equal(next.game.phase, 'bidding');
+  assert.equal(next.players.every((player) => !player.rematchReady), true);
+});

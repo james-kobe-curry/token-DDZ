@@ -45,6 +45,8 @@ export function createAuthoritativeGame({ seed = createSeed(), commit = '' } = {
     spring: null,
     playCounts: [0, 0, 0],
     playedCards: [],
+    lastAction: null,
+    turnDeadline: 0,
   };
 }
 
@@ -58,6 +60,7 @@ function finishBidding(state, landlord) {
     landlord,
     current: landlord,
     lastPlay: null,
+    multiplier: Math.max(1, state.highestBid || 1),
   };
 }
 
@@ -77,6 +80,7 @@ function applyBid(state, action) {
     bidCount,
     bids: [...state.bids, { player: action.player, score: action.score }],
     current: nextPlayerCounterClockwise(action.player),
+    lastAction: { type: 'bid', player: action.player, score: action.score },
   };
   if (action.score === 3) next = finishBidding(next, action.player);
   else if (bidCount >= 3) next = highestBidder === null ? { ...next, phase: 'redeal' } : finishBidding(next, highestBidder);
@@ -119,6 +123,7 @@ function applyPlay(state, action) {
     lastActor: action.player,
     passCount: 0,
     playedCards: [...state.playedCards, ...cards],
+    lastAction: { type: 'play', player: action.player, cards, combo: { ...combo, cards: undefined } },
   };
 }
 
@@ -128,9 +133,9 @@ function applyPass(state, action) {
   reject(!state.lastPlay, 'CANNOT_PASS', '拥有牌权时不能选择不出');
   const passCount = state.passCount + 1;
   if (passCount >= 2) {
-    return { ...state, current: state.lastPlay.player, lastPlay: null, passCount: 0 };
+    return { ...state, current: state.lastPlay.player, lastPlay: null, passCount: 0, lastAction: { type: 'pass', player: action.player } };
   }
-  return { ...state, current: nextPlayerCounterClockwise(action.player), passCount };
+  return { ...state, current: nextPlayerCounterClockwise(action.player), passCount, lastAction: { type: 'pass', player: action.player } };
 }
 
 export function reduceAuthoritativeAction(state, action) {
@@ -170,6 +175,8 @@ export function projectGameForPlayer(state, player) {
     spring: state.spring,
     playCounts: state.playCounts,
     playedCards: state.playedCards,
+    lastAction: state.lastAction,
+    turnDeadline: state.turnDeadline || 0,
     commit: state.commit,
     ...(ended ? { seed: state.seed, deckOrder: state.deckOrder, revealedHands: state.hands } : {}),
   };

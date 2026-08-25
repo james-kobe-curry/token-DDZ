@@ -32,6 +32,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -55,6 +57,7 @@ final class PhoneLanServer {
     private final Map<String, WebSocketConnection> clients = new ConcurrentHashMap<>();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private ExecutorService executor;
+    private ScheduledExecutorService heartbeatExecutor;
     private ServerSocket serverSocket;
     private int port;
 
@@ -76,6 +79,12 @@ final class PhoneLanServer {
         });
         running.set(true);
         executor.execute(this::acceptLoop);
+        heartbeatExecutor = Executors.newSingleThreadScheduledExecutor((task) -> {
+            Thread thread = new Thread(task, "token-lan-heartbeat");
+            thread.setDaemon(true);
+            return thread;
+        });
+        heartbeatExecutor.scheduleAtFixedRate(this::heartbeat, 10, 10, TimeUnit.SECONDS);
         return port;
     }
 
@@ -85,7 +94,9 @@ final class PhoneLanServer {
         for (WebSocketConnection connection : clients.values()) connection.close();
         clients.clear();
         if (executor != null) executor.shutdownNow();
+        if (heartbeatExecutor != null) heartbeatExecutor.shutdownNow();
         executor = null;
+        heartbeatExecutor = null;
         serverSocket = null;
     }
 
@@ -146,6 +157,21 @@ final class PhoneLanServer {
             if (!stopReason.isEmpty()) {
                 running.set(false);
                 listener.onServerStopped(stopReason);
+            }
+        }
+    }
+
+    private void heartbeat() {
+        long now = System.currentTimeMillis();
+        for (WebSocketConnection connection : clients.values()) {
+            if (now - connection.lastSeenAt > 30000) {
+                connection.close();
+                continue;
+            }
+            try {
+                connection.ping();
+            } catch (IOException error) {
+                connection.close();
             }
         }
     }
@@ -229,7 +255,7 @@ final class PhoneLanServer {
             return;
         }
         if ("/api/health".equals(request.path)) {
-            String body = "{\"ok\":true,\"protocolVersion\":1,\"host\":\"android\"}";
+            String body = "{\"ok\":true,\"protocolVersion\":2,\"clientVersion\":\"0.1.8\",\"host\":\"android\"}";
             writeResponse(output, 200, "application/json; charset=utf-8", body.getBytes(StandardCharsets.UTF_8), "HEAD".equals(request.method));
             return;
         }
@@ -291,6 +317,7 @@ final class PhoneLanServer {
         final BufferedInputStream input;
         final BufferedOutputStream output;
         final AtomicBoolean open = new AtomicBoolean(true);
+        volatile long lastSeenAt = System.currentTimeMillis();
 
         WebSocketConnection(String clientId, Socket socket, BufferedInputStream input, BufferedOutputStream output) {
             this.clientId = clientId;
@@ -318,6 +345,7 @@ final class PhoneLanServer {
                 byte[] mask = readExact(input, 4);
                 byte[] payload = readExact(input, (int) length);
                 for (int index = 0; index < payload.length; index++) payload[index] ^= mask[index % 4];
+                lastSeenAt = System.currentTimeMillis();
                 if (opcode == 0x8) break;
                 if (opcode == 0x9) {
                     sendFrame(0xA, payload);
@@ -325,6 +353,10 @@ final class PhoneLanServer {
                 }
                 if (opcode == 0x1) listener.onClientMessage(clientId, new String(payload, StandardCharsets.UTF_8));
             }
+        }
+
+        void ping() throws IOException {
+            sendFrame(0x9, new byte[0]);
         }
 
         synchronized void sendText(String message) throws IOException {

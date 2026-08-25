@@ -1548,6 +1548,9 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
 .lan-seat strong { font-size:13px; }
 .lan-seat small,.lan-self-seat small { margin-top:5px; color:#9eb1a7; font-size:9px; }
 .lan-seat > i { position:absolute; top:-11px; right:-7px; padding:3px 7px; border:1px solid #d6a64f; border-radius:8px; color:#50220e; background:linear-gradient(#f4d78f,#c68d35); font-size:9px; font-style:normal; font-weight:900; }
+.lan-seat-timer { width:31px;height:31px;position:absolute;top:-16px;left:-13px;display:grid;place-items:center;border:2px solid rgba(239,204,126,.78);border-radius:50%;color:#fff1bd;background:#173d2f;box-shadow:0 0 18px rgba(229,188,94,.25);font-size:12px;font-style:normal;font-weight:900; }
+.lan-seat-timer.urgent { border-color:#ff8e6f;color:#ffe1d6;background:#6f2722;animation:lanUrgent .55s ease-in-out infinite alternate; }
+.lan-action-bubble { position:absolute;left:50%;bottom:-34px;transform:translateX(-50%);padding:6px 11px;border:1px solid rgba(239,203,127,.35);border-radius:12px;color:#ffe9b7;background:rgba(86,38,25,.94);box-shadow:0 8px 20px rgba(0,0,0,.3);font-size:10px;white-space:nowrap;animation:lanBubbleIn .2s ease-out; }
 .lan-bottom-cards { position:absolute; z-index:5; left:50%; top:8px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; }
 .lan-bottom-cards > strong { color:#ddc58f; font-size:10px; }
 .lan-bottom-cards > div { min-width:108px; height:52px; padding:4px 7px; display:flex; justify-content:center; gap:5px; border:1px solid rgba(231,199,128,.12); border-radius:10px; background:rgba(4,24,18,.34); }
@@ -1564,12 +1567,17 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
 .lan-center-play .card-rank { font-size:15px; }.lan-center-play .card-suit { font-size:10px; }.lan-center-play .card-center { font-size:20px; }
 .lan-self-seat { left:max(3%,env(safe-area-inset-left)); bottom:14px; padding:8px 13px; flex-direction:column; align-items:flex-start; }
 .lan-self-seat span { color:#f1dba8; font-size:12px; font-weight:800; }
+.lan-self-seat .lan-seat-timer { left:auto;right:-14px;top:-15px; }.lan-self-seat .lan-action-bubble { top:-37px;bottom:auto; }
 .lan-actions { min-height:50px; position:absolute; z-index:14; left:50%; bottom:145px; transform:translateX(-50%); display:flex; align-items:center; justify-content:center; gap:9px; white-space:nowrap; }
 .lan-actions > span { padding:11px 20px; border:1px solid rgba(231,199,128,.13); border-radius:20px; color:#d5c49f; background:rgba(5,27,20,.72); font-size:12px; }
 .lan-actions button { min-width:82px; height:43px; padding:0 16px; border:1px solid rgba(233,211,167,.19); border-radius:14px; color:#eadfca; background:linear-gradient(#234d3b,#15372b); box-shadow:0 8px 17px rgba(0,0,0,.23),inset 0 1px rgba(255,255,255,.06); font-size:12px; font-weight:800; cursor:pointer; transition:transform .16s,filter .16s; }
 .lan-actions button:hover:not(:disabled) { transform:translateY(-2px); filter:brightness(1.08); }
 .lan-actions button.primary { min-width:128px; border-color:#edc775; color:#3b250b; background:linear-gradient(145deg,#f4d68c,#c99036); box-shadow:0 10px 23px rgba(182,120,37,.27),inset 0 1px rgba(255,255,255,.55); }
 .lan-notice { position:absolute; z-index:18; left:50%; bottom:202px; transform:translateX(-50%); padding:8px 15px; border:1px solid rgba(238,204,134,.2); border-radius:18px; color:#f1deb3; background:rgba(70,34,25,.85); box-shadow:0 9px 22px rgba(0,0,0,.24); font-size:10px; }
+.lan-network-cover { position:absolute;z-index:40;inset:64px 0 0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#f6e4b9;background:rgba(4,18,14,.68);backdrop-filter:blur(5px); }
+.lan-network-cover i { width:34px;height:34px;margin-bottom:14px;border:3px solid rgba(229,199,135,.2);border-top-color:#e8c776;border-radius:50%;animation:spin .8s linear infinite; }
+.lan-network-cover strong { font-size:17px; }.lan-network-cover small { margin-top:7px;color:#9eb4a9;font-size:11px; }
+.lan-impact { position:absolute;z-index:30;inset:0;pointer-events:none;display:grid;place-items:center;background:radial-gradient(circle,rgba(255,207,102,.2),transparent 45%);animation:lanImpact .65s ease-out both; }.lan-impact b { width:86px;height:86px;display:grid;place-items:center;border:2px solid #f4ca6d;border-radius:50%;color:#ffe8a5;background:rgba(121,34,25,.88);box-shadow:0 0 50px rgba(255,174,60,.5);font-family:ui-serif,'Songti SC',serif;font-size:42px; }
 .lan-hand { width:min(82vw,1050px); height:126px; position:absolute; z-index:10; left:50%; bottom:4px; transform:translateX(-50%); display:flex; align-items:flex-end; justify-content:center; padding-right:clamp(44px,calc((var(--hand-count) - 10) * 4px),76px); touch-action:pan-y; }
 .lan-hand .poker-card { width:78px; height:112px; margin-right:clamp(-51px,calc((var(--hand-count) - 10) * -2.25px),-27px); padding:8px; }
 .lan-hand .poker-card.selected { transform:translateY(-20px); z-index:30; }
@@ -1578,10 +1586,16 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
 .lan-result small { display:block;margin-top:20px;color:#d3b879;letter-spacing:.16em; }
 .lan-result h1 { margin:10px 0;color:#fff0c9;font-family:ui-serif,'Songti SC',serif;font-size:44px; }
 .lan-result p { margin:0 0 24px;color:#a9bbb2; }
+.lan-result-error { display:block;margin:-12px 0 18px;color:#ffb4a8;font-size:13px;font-weight:600; }
+.lan-result-actions { display:flex;justify-content:center;gap:10px; }.lan-result-actions .btn { min-width:138px; }
 @keyframes lanBreathe { 50% { opacity:.58; transform:scale(1.02); } }
 @keyframes lanActive { 50% { box-shadow:0 0 0 5px rgba(231,190,99,.06),0 0 36px rgba(229,188,94,.28); } }
+@keyframes lanUrgent { to { transform:scale(1.1);box-shadow:0 0 22px rgba(255,94,68,.45); } }
+@keyframes lanBubbleIn { from { opacity:0;transform:translate(-50%,6px) scale(.92); } }
+@keyframes lanImpact { 0% { opacity:0;transform:scale(.75); } 22% { opacity:1;transform:scale(1.05); } 100% { opacity:0;transform:scale(1.3); } }
 
 @media (orientation:landscape) and (max-height:720px) {
+  .lan-lobby,.lan-result { padding:7px max(12px,env(safe-area-inset-left)); }
   .lan-game { min-height:0; }
   .lan-game-header { height:48px; padding-inline:max(10px,env(safe-area-inset-left)); gap:8px; }
   .lan-game-header .icon-btn { width:31px;height:31px; }.lan-game-header > span { min-width:56px; }.lan-game-header small { font-size:7px; }.lan-game-header strong,.lan-game-header > span b { font-size:10px; }

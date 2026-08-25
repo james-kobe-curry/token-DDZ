@@ -14,10 +14,10 @@ export const GAME_RULES = Object.freeze({
   airplaneWingsMayReuseCoreRank: false,
 });
 export const AI_DIFFICULTIES = Object.freeze({
-  super: Object.freeze({ id: 'super', name: '超强人机', shortName: '超强', memoryRatio: 1, planningHandLimit: 12, nodeLimit: 26000, samples: 72, teamwork: 1, structureWeight: 4.2, planningWeight: 28, controlWeight: 10, sampleWeight: 54, bombPenalty: 190, accuracy: 1, choiceWindow: 1, description: '完整记牌、未知手牌采样与深度牌路搜索，重视牌权、配合和终局控制。' }),
-  master: Object.freeze({ id: 'master', name: '大师', shortName: '大师', memoryRatio: .92, planningHandLimit: 10, nodeLimit: 15000, samples: 36, teamwork: .98, structureWeight: 4, planningWeight: 23, controlWeight: 10, sampleWeight: 60, bombPenalty: 175, accuracy: .72, choiceWindow: 4, description: '高精度记牌和概率推演，稳定配合队友并谨慎使用炸弹。' }),
-  elite: Object.freeze({ id: 'elite', name: '精英', shortName: '精英', memoryRatio: .72, planningHandLimit: 8, nodeLimit: 8000, samples: 14, teamwork: .86, structureWeight: 3.2, planningWeight: 17, controlWeight: 7, sampleWeight: 42, bombPenalty: 155, accuracy: .45, choiceWindow: 7, description: '具备可靠的结构判断、局势意识和部分未知牌推演。' }),
-  normal: Object.freeze({ id: 'normal', name: '普通', shortName: '普通', memoryRatio: .42, planningHandLimit: 6, nodeLimit: 3500, samples: 4, teamwork: .62, structureWeight: 2, planningWeight: 10, controlWeight: 4, sampleWeight: 24, bombPenalty: 125, accuracy: .24, choiceWindow: 11, description: '懂基本牌型与简单配合，偶尔拆牌或错过更优牌路。' }),
+  super: Object.freeze({ id: 'super', name: '超强人机', shortName: '超强', memoryRatio: 1, planningHandLimit: 12, nodeLimit: 26000, samples: 72, teamwork: 1, structureWeight: 4.2, planningWeight: 28, controlWeight: 10, sampleWeight: 54, bombPenalty: 190, accuracy: 1, choiceWindow: 1, description: '完整记牌、牌型拆解、未知手牌采样与终局搜索，会计算牌权并主动与队友做牌。' }),
+  master: Object.freeze({ id: 'master', name: '大师', shortName: '大师', memoryRatio: .95, planningHandLimit: 11, nodeLimit: 19000, samples: 42, teamwork: .98, structureWeight: 4.1, planningWeight: 25, controlWeight: 10, sampleWeight: 58, bombPenalty: 182, accuracy: .72, choiceWindow: 4, description: '高精度记牌和概率推演，懂得让牌、接牌、封堵与保留终局控制牌。' }),
+  elite: Object.freeze({ id: 'elite', name: '精英', shortName: '精英', memoryRatio: .72, planningHandLimit: 8, nodeLimit: 8000, samples: 14, teamwork: .86, structureWeight: 3.2, planningWeight: 17, controlWeight: 7, sampleWeight: 42, bombPenalty: 155, accuracy: .4, choiceWindow: 7, description: '具备可靠的结构判断、危险感知和农民协作，只在复杂局面保留少量误差。' }),
+  normal: Object.freeze({ id: 'normal', name: '普通', shortName: '普通', memoryRatio: .42, planningHandLimit: 6, nodeLimit: 3500, samples: 4, teamwork: .62, structureWeight: 2, planningWeight: 10, controlWeight: 4, sampleWeight: 24, bombPenalty: 125, accuracy: .24, choiceWindow: 11, description: '懂基本牌理与简单配合，复杂牌路中仍可能拆牌或错过牌权。' }),
   rookie: Object.freeze({ id: 'rookie', name: '菜鸟', shortName: '菜鸟', memoryRatio: 0, planningHandLimit: 0, nodeLimit: 0, samples: 0, teamwork: .22, structureWeight: .65, planningWeight: 0, controlWeight: 0, sampleWeight: 0, bombPenalty: 70, accuracy: .05, choiceWindow: 14, description: '主要依据当前牌型行动，较少记牌、计算和主动配合。' }),
 });
 export const rankValue = (rank) => {
@@ -505,6 +505,19 @@ function sampledControlMetrics(candidate, hand, samples, context) {
   return { responseRate: responses / samples.length, recaptureRate: responses ? recaptures / responses : 0 };
 }
 
+function sampledTeammateFinishRate(candidate, samples, context) {
+  if (!samples.length || context.currentPlayer === null || context.currentPlayer === undefined || context.landlord === null || context.landlord === undefined) return 0;
+  const teammate = nextPlayerCounterClockwise(context.currentPlayer);
+  const cardsLeft = context.handSizes?.[teammate] ?? 99;
+  if (!sameTeam(context.currentPlayer, teammate, context.landlord) || cardsLeft > 4) return 0;
+  let finishes = 0;
+  samples.forEach((sample) => {
+    const response = fastBeatingCombo(sample[teammate], candidate.combo);
+    if (response?.length === cardsLeft) finishes += 1;
+  });
+  return finishes / samples.length;
+}
+
 function potentialHigherResponses(combo, unseen) {
   if (!combo || combo.type === 'rocket') return 0;
   let responses = 0;
@@ -633,8 +646,10 @@ export function rankStrategicOptions(hand, previous = null, context = {}, diffic
       const metrics = sampledControlMetrics(candidate, hand, possibleHands, context);
       candidate.responseRate = metrics.responseRate;
       candidate.recaptureRate = metrics.recaptureRate;
+      candidate.teammateFinishRate = !previous ? sampledTeammateFinishRate(candidate, possibleHands, context) : 0;
       const urgency = opponentThreat ? 1.8 : opponentClosing ? 1 : .28;
       candidate.score += metrics.responseRate * profile.sampleWeight * urgency - metrics.recaptureRate * profile.sampleWeight * .32;
+      candidate.score -= candidate.teammateFinishRate * 110 * profile.teamwork;
     });
   }
   ranked.sort((a, b) => a.score - b.score || a.combo.rank - b.combo.rank || b.cards.length - a.cards.length);
@@ -851,6 +866,10 @@ export function rankStrategicActions(hand, previous = null, context = {}, diffic
     passScore = currentPlayer === null ? best.score + 22 : best.score - 28;
     reason = '当前压制需要破坏炸弹或王炸，暂时不出更利于保留终局牌力';
   }
+  if (teammateHasLead && (handSizes[lastPlayer] ?? 99) <= 2 && !mustTakeOver) {
+    passScore = Math.min(passScore, best.score - 760 * profile.teamwork);
+    reason = '队友已经进入收官，主动让牌可避免破坏其牌权';
+  }
   const actions = [...plays, { action: 'pass', cards: [], combo: null, score: passScore, reason, breakCost: 0, responseRate: 0, recaptureRate: 0 }]
     .sort((a, b) => a.score - b.score);
   return actions.map((action, index) => ({ ...action, grade: index === 0 ? '首选' : index === 1 ? '稳健' : index === 2 ? '激进' : '备选' }));
@@ -861,11 +880,14 @@ export function analyzeAiDecision(hand, previous, context = {}) {
   const actions = rankStrategicActions(hand, previous, context, profile);
   if (!actions.length) return { action: 'pass', cards: [], reason: '没有可执行动作', difficulty: profile.id, alternatives: [] };
   let index = 0;
-  if (context.difficulty && profile.choiceWindow > 1 && deterministicDecisionRoll(hand, context) > profile.accuracy) {
-    const available = Math.min(profile.choiceWindow, actions.length);
+  const opponents = (context.handSizes || []).map((_, player) => player).filter((player) => player !== context.currentPlayer && !sameTeam(context.currentPlayer, player, context.landlord));
+  const opponentThreat = opponents.some((player) => (context.handSizes[player] ?? 99) <= 2);
+  const choicePool = opponentThreat && profile.teamwork >= .8 ? actions.filter((action) => action.action === 'play') : actions;
+  if (actions[0].remaining?.length !== 0 && context.difficulty && profile.choiceWindow > 1 && deterministicDecisionRoll(hand, context) > profile.accuracy) {
+    const available = Math.min(profile.choiceWindow, choicePool.length);
     index = Math.min(available - 1, 1 + Math.floor(deterministicDecisionRoll([...hand].reverse(), context) * Math.max(1, available - 1)));
   }
-  const chosen = actions[index];
+  const chosen = choicePool[index] || actions[0];
   return {
     action: chosen.action,
     cards: chosen.cards,

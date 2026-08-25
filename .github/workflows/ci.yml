@@ -32,3 +32,26 @@ jobs:
           npm run smoke:lan
           SMOKE_URL=http://127.0.0.1:5173 SMOKE_LAN_URL=ws://127.0.0.1:4174/ws npm run smoke:ui
       - run: npm audit --omit=dev --registry=https://registry.npmjs.org
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - run: chmod +x android/gradlew
+      - run: ./android/gradlew -p android lintDebug assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: token-landlords-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk

@@ -175,6 +175,24 @@ test('五档 AI 难度逐级增加记牌、搜索与协作能力', () => {
     assert.ok(ordered[index - 1].teamwork >= ordered[index].teamwork);
     assert.ok(ordered[index - 1].accuracy >= ordered[index].accuracy);
   }
+  assert.equal(AI_DIFFICULTIES.super.accuracy, 1);
+  assert.ok(AI_DIFFICULTIES.master.accuracy >= .7);
+});
+
+test('高阶农民在队友即将走完时不会用炸弹抢牌权', () => {
+  const hand = cards([['6', 4], ['9', 1]]);
+  const target = { ...classifyPlay(cards([['5', 1]])), player: 1 };
+  const action = rankStrategicActions(hand, target, { currentPlayer: 2, landlord: 0, lastPlayer: 1, handSizes: [8, 1, 5] }, 'super')[0];
+  assert.equal(action.action, 'pass');
+  assert.match(action.reason, /队友|牌权/);
+});
+
+test('超强 AI 会评估给下家队友直接走完的概率', () => {
+  const hand = cards([['3', 1], ['5', 2], ['9', 1]]);
+  const ranking = rankStrategicOptions(hand, null, { currentPlayer: 2, landlord: 0, handSizes: [8, 1, 4], seenCards: [], publicCards: [], turnSerial: 8 }, 'super');
+  assert.equal(ranking[0].combo.type, 'single');
+  assert.equal(typeof ranking[0].teammateFinishRate, 'number');
+  assert.ok(ranking[0].teammateFinishRate > 0);
 });
 
 test('高难度会用公开记牌判断收官控制，菜鸟仍倾向低牌', () => {

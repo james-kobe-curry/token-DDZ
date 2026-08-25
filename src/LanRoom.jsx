@@ -1,11 +1,40 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { canBeat, classifyPlay, enumeratePlayableOptions, findBestGesturePlay, matchLikelyPlay, playNames } from './gameLogic';
+import { canBeat, classifyPlay, findBestGesturePlay, matchLikelyPlay, playNames, rankStrategicActions } from './gameLogic';
 import { defaultLanWebSocketUrl, LanClient, readLanSession } from './lanClient';
 import { canHostOnThisDevice, PhoneLanHostController } from './phoneLanHost';
 import { Icon } from './icons';
 
 const SERVER_KEY = 'token-landlords:lan-server:v1';
+const GAME_SETTINGS_KEY = 'token-landlords:match-settings:v2';
+let lanAudioContext = null;
+
+function readLanEffects() {
+  try {
+    const settings = JSON.parse(window.localStorage.getItem(GAME_SETTINGS_KEY) || '{}');
+    return { soundOn: settings.soundOn !== false, vibrationOn: settings.vibrationOn !== false };
+  } catch {
+    return { soundOn: true, vibrationOn: true };
+  }
+}
+
+function playLanCue(type = 'action') {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    lanAudioContext ||= new AudioContextClass();
+    if (lanAudioContext.state === 'suspended') lanAudioContext.resume();
+    const oscillator = lanAudioContext.createOscillator();
+    const gain = lanAudioContext.createGain();
+    oscillator.type = type === 'bomb' ? 'sawtooth' : 'triangle';
+    oscillator.frequency.value = type === 'turn' ? 660 : type === 'bomb' ? 105 : type === 'pass' ? 260 : 430;
+    gain.gain.setValueAtTime(type === 'bomb' ? .055 : .035, lanAudioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, lanAudioContext.currentTime + (type === 'bomb' ? .28 : .11));
+    oscillator.connect(gain).connect(lanAudioContext.destination);
+    oscillator.start();
+    oscillator.stop(lanAudioContext.currentTime + (type === 'bomb' ? .28 : .11));
+  } catch { /* audio is optional */ }
+}
 
 function normalizeServerUrl(value) {
   let url = String(value || '').trim();
@@ -30,23 +59,30 @@ function CardFace({ card, selected = false, onClick, onPointerDown, onKeyDown, c
   );
 }
 
-function Seat({ player, cards, active, side, landlord }) {
+function Seat({ player, cards, active, side, landlord, action, seconds }) {
   return (
     <div className={`lan-seat lan-seat-${side} ${active ? 'active' : ''}`}>
       <span className="lan-avatar">{player?.name?.slice(0, 1) || '?'}</span>
       <span><strong>{player?.name || '等待加入'}</strong><small>{player ? `${player.connected ? '在线' : '重连中'} · ${cards} 张` : '空座位'}</small></span>
       {landlord && <i>地主</i>}
+      {active && <em className={`lan-seat-timer ${seconds <= 5 ? 'urgent' : ''}`}>{seconds}</em>}
+      {action && <b className="lan-action-bubble">{action}</b>}
     </div>
   );
 }
 
-function LanMatch({ room, client, onExit }) {
+function LanMatch({ room, client, status, onExit }) {
   const game = room.game;
   const self = room.selfPlayer;
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [hintIndex, setHintIndex] = useState(0);
+  const [clock, setClock] = useState(Date.now());
+  const [actionBubble, setActionBubble] = useState(null);
+  const [impact, setImpact] = useState(false);
+  const [resultNotice, setResultNotice] = useState('');
+  const effects = useMemo(readLanEffects, []);
   const previousVersion = useRef(game.stateVersion);
   const selectedRef = useRef(selected);
   const handElement = useRef(null);
@@ -54,7 +90,12 @@ function LanMatch({ room, client, onExit }) {
   const selectedCards = useMemo(() => game.selfHand.filter((card) => selected.includes(card.id)), [game.selfHand, selected]);
   const selectedCombo = useMemo(() => classifyPlay(selectedCards), [selectedCards]);
   const canSubmit = Boolean(selectedCombo && canBeat(selectedCombo, game.lastPlay));
-  const hints = useMemo(() => enumeratePlayableOptions(game.selfHand, game.lastPlay), [game.selfHand, game.lastPlay]);
+  const hints = useMemo(() => rankStrategicActions(game.selfHand, game.lastPlay, {
+    currentPlayer: self, landlord: game.landlord, lastPlayer: game.lastActor,
+    handSizes: game.handSizes, seenCards: game.playedCards, publicCards: game.bottom,
+    turnSerial: game.stateVersion, includeAlternatives: true,
+  }, 'super').filter((action) => action.action === 'play').map((action) => action.cards), [game.selfHand, game.lastPlay, game.landlord, game.lastActor, game.handSizes, game.playedCards, game.bottom, game.stateVersion, self]);
+  const turnSeconds = Math.max(0, Math.ceil(((game.turnDeadline || clock) - clock) / 1000));
   // Dou Dizhu proceeds counter-clockwise on this table: self -> right -> left.
   const rightSeat = (self + 2) % 3;
   const leftSeat = (self + 1) % 3;
@@ -71,6 +112,36 @@ function LanMatch({ room, client, onExit }) {
   }, [game.selfHand, game.stateVersion]);
 
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const action = game.lastAction;
+    if (!action) return undefined;
+    const label = action.type === 'bid' ? (action.score ? `${action.score} 分` : '不叫') : action.type === 'pass' ? '不出' : playNames[action.combo?.type] || '出牌';
+    setActionBubble({ player: action.player, label: action.automated ? `托管 · ${label}` : label });
+    const special = ['bomb', 'rocket'].includes(action.combo?.type);
+    if (effects.soundOn) playLanCue(special ? 'bomb' : action.type === 'pass' ? 'pass' : 'action');
+    if (special) setImpact(true);
+    const timer = window.setTimeout(() => setActionBubble(null), 1600);
+    const impactTimer = window.setTimeout(() => setImpact(false), 650);
+    return () => { window.clearTimeout(timer); window.clearTimeout(impactTimer); };
+  }, [game.stateVersion, game.lastAction, effects.soundOn]);
+
+  useEffect(() => {
+    if (game.current !== self || !['bidding', 'playing'].includes(game.phase)) return;
+    if (effects.soundOn) playLanCue('turn');
+    if (effects.vibrationOn) navigator.vibrate?.([12, 34, 14]);
+  }, [game.current, game.phase, game.stateVersion, self, effects.soundOn, effects.vibrationOn]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = window.setTimeout(() => setNotice(''), 1900);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     const cardAtPoint = (clientX, clientY) => {
@@ -159,6 +230,8 @@ function LanMatch({ room, client, onExit }) {
     setBusy(true);
     try {
       await client.act(action, game.stateVersion);
+      await client.sync();
+      setBusy(false);
     } catch (error) {
       setBusy(false);
       setNotice(error.message);
@@ -176,26 +249,34 @@ function LanMatch({ room, client, onExit }) {
 
   if (game.phase === 'ended') {
     const won = game.winner === self || (game.landlord !== self && game.winner !== game.landlord);
-    return <main className="lan-result"><div><span className="room-seal">斗</span><small>局域网牌局结束</small><h1>{won ? '本方获胜' : '本方落败'}</h1><p>胜者：{playerAt(game.winner)?.name} · 最终倍数 ×{game.multiplier}</p><button className="btn btn-primary" onClick={onExit}>返回大厅</button></div></main>;
+    const selfPlayer = playerAt(self);
+    const rematchCount = room.players.filter((player) => player.rematchReady).length;
+    return <main className="lan-result"><div><span className="room-seal">斗</span><small>局域网牌局结束</small><h1>{won ? '本方获胜' : '本方落败'}</h1><p>胜者：{playerAt(game.winner)?.name} · 最终倍数 ×{game.multiplier}{game.spring ? ` · ${game.spring === 'spring' ? '春天' : '反春天'}` : ''}</p>{resultNotice && <b className="lan-result-error">{resultNotice}</b>}<div className="lan-result-actions"><button className={`btn ${selfPlayer?.rematchReady ? 'btn-ghost' : 'btn-primary'}`} disabled={busy || status !== 'connected'} onClick={async () => { setBusy(true); setResultNotice(''); try { await client.setRematch(!selfPlayer?.rematchReady); } catch (error) { setResultNotice(error.message || '操作失败，请重试'); } finally { setBusy(false); } }}>{selfPlayer?.rematchReady ? '取消再来一局' : '再来一局'} · {rematchCount}/3</button><button className="btn btn-ghost" onClick={onExit}>返回大厅</button></div></div></main>;
   }
+
+  const confirmExit = () => {
+    const copy = self === 0 ? '你是房主，退出会结束本机房间，确定离开吗？' : '退出后可以凭本机重连凭证恢复牌局，确定离开吗？';
+    if (window.confirm(copy)) onExit();
+  };
 
   return (
     <main className="lan-game">
       <header className="lan-game-header">
-        <button className="icon-btn" onClick={onExit} aria-label="退出局域网牌局"><Icon name="close" /></button>
+        <button className="icon-btn" onClick={confirmExit} aria-label="退出局域网牌局"><Icon name="close" /></button>
         <div><small>局域网好友房</small><strong>房间 {room.code}</strong></div>
         <span><small>状态版本</small><b>#{game.stateVersion}</b></span>
         <span><small>倍数</small><b>×{game.multiplier}</b></span>
       </header>
       <section className="lan-table">
+        {impact && <div className="lan-impact"><b>炸</b></div>}
         <div className="table-surface premium-table"><div className="table-ring" /><div className="table-logo"><b>斗</b><span>LAN FRIEND ROOM</span></div></div>
-        <Seat player={playerAt(leftSeat)} cards={game.handSizes[leftSeat]} active={game.current === leftSeat} side="left" landlord={game.landlord === leftSeat} />
-        <Seat player={playerAt(rightSeat)} cards={game.handSizes[rightSeat]} active={game.current === rightSeat} side="right" landlord={game.landlord === rightSeat} />
+        <Seat player={playerAt(leftSeat)} cards={game.handSizes[leftSeat]} active={game.current === leftSeat} side="left" landlord={game.landlord === leftSeat} action={actionBubble?.player === leftSeat ? actionBubble.label : ''} seconds={turnSeconds} />
+        <Seat player={playerAt(rightSeat)} cards={game.handSizes[rightSeat]} active={game.current === rightSeat} side="right" landlord={game.landlord === rightSeat} action={actionBubble?.player === rightSeat ? actionBubble.label : ''} seconds={turnSeconds} />
         <div className="lan-bottom-cards"><strong>地主牌</strong><div>{game.bottom.length ? game.bottom.map((card) => <CardFace key={card.id} card={card} compact />) : Array.from({ length: game.bottomCount }, (_, index) => <i key={index}>T</i>)}</div></div>
         <div className="lan-center-play">
           {game.lastPlay ? <><small>{playerAt(game.lastPlay.player)?.name} · {playNames[game.lastPlay.type]}</small><div>{game.lastPlay.cards.map((card) => <CardFace key={card.id} card={card} compact />)}</div></> : <strong>{game.phase === 'bidding' ? '叫地主' : '新一轮牌权'}</strong>}
         </div>
-        <div className={`lan-self-seat ${game.current === self ? 'active' : ''}`}><span>{playerAt(self)?.name}</span><small>{game.landlord === self ? '地主' : game.landlord === null ? '等待叫分' : '农民'} · {game.selfHand.length} 张</small></div>
+        <div className={`lan-self-seat ${game.current === self ? 'active' : ''}`}><span>{playerAt(self)?.name}</span><small>{game.landlord === self ? '地主' : game.landlord === null ? '等待叫分' : '农民'} · {game.selfHand.length} 张</small>{game.current === self && <em className={`lan-seat-timer ${turnSeconds <= 5 ? 'urgent' : ''}`}>{turnSeconds}</em>}{actionBubble?.player === self && <b className="lan-action-bubble">{actionBubble.label}</b>}</div>
         <div className="lan-actions">
           {game.phase === 'bidding' ? (
             game.current === self
@@ -206,6 +287,7 @@ function LanMatch({ room, client, onExit }) {
           )}
         </div>
         {notice && <div className="lan-notice">{notice}</div>}
+        {status !== 'connected' && <div className="lan-network-cover"><i /><strong>{status === 'reconnecting' ? '网络波动，正在自动重连' : status === 'incompatible' ? '联机版本不兼容' : '与房主连接中断'}</strong><small>{status === 'reconnecting' ? '恢复后将自动同步最新牌局' : '请检查 Wi-Fi 或房主状态'}</small></div>}
         <div ref={handElement} className="lan-hand" style={{ '--hand-count': game.selfHand.length }}>
           {game.selfHand.map((card) => <CardFace key={card.id} card={card} selected={selected.includes(card.id)} onPointerDown={(event) => startCardDrag(event, card.id)} onKeyDown={(event) => { if (event.key !== 'Enter' && event.key !== ' ') return; event.preventDefault(); setSelected((items) => items.includes(card.id) ? items.filter((id) => id !== card.id) : [...items, card.id]); }} />)}
         </div>
@@ -242,7 +324,10 @@ export default function LanRoom({ profile, onExit }) {
     const client = new LanClient({
       url,
       onStatus: setStatus,
-      onMessage: (message) => { if (message.type === 'room_state') setRoom(message.payload); },
+      onMessage: (message) => {
+        if (message.type === 'room_state') setRoom(message.payload);
+        if (message.type === 'error' || message.type === 'host_closing') setError(message.message || '房主已结束房间');
+      },
     });
     clientRef.current = client;
     await client.connect();
@@ -278,7 +363,7 @@ export default function LanRoom({ profile, onExit }) {
     }
   };
 
-  if (room?.game) return <LanMatch room={room} client={clientRef.current} onExit={onExit} />;
+  if (room?.game) return <LanMatch room={room} client={clientRef.current} status={status} onExit={onExit} />;
 
   return (
     <main className="lan-lobby">
@@ -307,7 +392,7 @@ export default function LanRoom({ profile, onExit }) {
             <button className="btn btn-primary lan-ready" onClick={() => { setError(''); clientRef.current.setReady(!room.players.find((player) => player.seat === room.selfPlayer)?.ready).catch((reason) => setError(reason.message)); }}>{room.players.find((player) => player.seat === room.selfPlayer)?.ready ? '取消准备' : '准备开局'}</button>
           </>
         )}
-        <footer><i className={`connection-dot ${status}`} /> {status === 'connected' ? '已连接房主' : status === 'connecting' ? '正在连接' : status === 'error' ? '连接失败' : '等待连接'}{error && <b>{error}</b>}</footer>
+        <footer><i className={`connection-dot ${status}`} /> {status === 'connected' ? '已连接房主' : status === 'connecting' ? '正在连接' : status === 'reconnecting' ? '正在自动重连' : status === 'incompatible' ? '版本不兼容' : status === 'error' ? '连接失败' : '等待连接'}{error && <b>{error}</b>}</footer>
       </section>
     </main>
   );

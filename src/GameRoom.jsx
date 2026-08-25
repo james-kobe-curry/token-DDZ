@@ -37,7 +37,7 @@ const CARD_BACK_SKINS = {
   '赤霞牌背': 'card-back-sunset', '创世链路': 'card-back-genesis',
 };
 const GAME_SETTINGS_KEY = 'token-landlords:match-settings:v2';
-const DEFAULT_GAME_SETTINGS = { soundOn: true, voiceOn: true, vibrationOn: true, smartArrange: true, autoMatch: true, motionOn: true, aiDifficulty: 'elite' };
+const DEFAULT_GAME_SETTINGS = { soundOn: true, voiceOn: true, vibrationOn: true, smartArrange: true, autoMatch: true, motionOn: true, aiDifficulty: 'super' };
 
 function loadGameSettings() {
   if (typeof window === 'undefined') return DEFAULT_GAME_SETTINGS;
@@ -187,9 +187,9 @@ function ActionBubble({ event }) {
   return <span className={`seat-action-bubble tone-${event.tone || 'normal'}`} key={event.key}>{event.text}</span>;
 }
 
-function Avatar({ index, landlord, current, cards, side, turnTime, action, backSkin, threat = false, aiDifficulty = 'elite', thought = '' }) {
+function Avatar({ index, landlord, current, cards, side, turnTime, action, backSkin, threat = false, aiDifficulty = 'super', thought = '' }) {
   const name = BOT_NAMES[index - 1];
-  const aiLevel = AI_DIFFICULTIES[aiDifficulty] || AI_DIFFICULTIES.elite;
+  const aiLevel = AI_DIFFICULTIES[aiDifficulty] || AI_DIFFICULTIES.super;
   return (
     <div className={`opponent opponent-${side} ${current ? 'active' : ''} ${threat ? 'threat' : ''}`}>
       <ActionBubble event={action} />
@@ -419,7 +419,7 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
   const [autoMatch, setAutoMatch] = useState(initialSettings.autoMatch);
   const [manualMatchSuppressed, setManualMatchSuppressed] = useState(false);
   const [motionOn, setMotionOn] = useState(initialSettings.motionOn);
-  const [aiDifficulty, setAiDifficulty] = useState(AI_DIFFICULTIES[initialSettings.aiDifficulty] ? initialSettings.aiDifficulty : 'elite');
+  const [aiDifficulty, setAiDifficulty] = useState(AI_DIFFICULTIES[initialSettings.aiDifficulty] ? initialSettings.aiDifficulty : 'super');
   const [actionLocked, setActionLocked] = useState(false);
   const [hintCursor, setHintCursor] = useState(0);
   const [gestureSnap, setGestureSnap] = useState(false);
@@ -719,7 +719,7 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
       : hand);
     const name = landlord === 0 ? '你' : BOT_NAMES[landlord - 1];
     return withReplayFrame(
-      { ...state, hands, phase: 'playing', landlord, current: landlord, lastPlay: null, logs: [`${name} 成为地主`, ...state.logs] },
+      { ...state, hands, phase: 'playing', landlord, current: landlord, lastPlay: null, multiplier: Math.max(1, state.highestBid || 1), logs: [`${name} 成为地主`, ...state.logs] },
       { actor: landlord, label: `${name}成为地主`, type: 'landlord' },
     );
   };

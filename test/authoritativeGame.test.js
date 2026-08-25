@@ -25,6 +25,14 @@ test('权威动作引擎按逆时针完成叫分并给地主加入底牌', () =>
   assert.equal(state.stateVersion, 3);
 });
 
+test('叫分分值成为牌局初始倍数', () => {
+  let state = createAuthoritativeGame({ seed: 'bid-multiplier' });
+  state = reduceAuthoritativeAction(state, { type: 'bid', player: 0, score: 3 });
+  assert.equal(state.phase, 'playing');
+  assert.equal(state.highestBid, 3);
+  assert.equal(state.multiplier, 3);
+});
+
 test('权威动作引擎拒绝越权、重复牌和无法压制的动作', () => {
   const state = bidToPlaying('reject-invalid');
   assert.throws(() => reduceAuthoritativeAction(state, { type: 'play', player: 2, cardIds: [state.hands[2][0].id] }), (error) => error instanceof GameActionError && error.code === 'NOT_YOUR_TURN');

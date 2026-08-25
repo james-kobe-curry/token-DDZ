@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { HostRoomError, HostRoomManager } from './hostRoomManager.js';
+import { LAN_CLIENT_VERSION, LAN_PROTOCOL_VERSION } from './lanProtocol.js';
 
 const PhoneLanHostPlugin = registerPlugin('PhoneLanHost');
 
@@ -30,7 +31,10 @@ export class PhoneLanHostController {
     try {
       const info = await PhoneLanHostPlugin.start({ port });
       this.started = true;
-      this.pruneTimer = window.setInterval(() => this.manager.prune(), 10000);
+      this.pruneTimer = window.setInterval(() => this.enqueue(async () => {
+        for (const code of await this.manager.tick()) await this.broadcastRoom(code);
+        this.manager.prune();
+      }), 1000);
       return info;
     } catch (error) {
       await this.removeListeners();
@@ -46,7 +50,11 @@ export class PhoneLanHostController {
   }
 
   async handleOpen(clientId) {
-    await this.send(clientId, { type: 'hello', payload: { protocolVersion: 1, heartbeatMs: 10000, host: 'android' } });
+    await this.send(clientId, { type: 'hello', payload: { protocolVersion: LAN_PROTOCOL_VERSION, clientVersion: LAN_CLIENT_VERSION, heartbeatMs: 10000, host: 'android' } });
+  }
+
+  requireCompatibleClient(payload = {}) {
+    if (payload.protocolVersion !== LAN_PROTOCOL_VERSION) throw new HostRoomError('PROTOCOL_MISMATCH', `联机版本不兼容，请将三台设备都升级到 ${LAN_CLIENT_VERSION}`);
   }
 
   async bindSession(clientId, session) {
@@ -65,16 +73,19 @@ export class PhoneLanHostController {
     const requestId = message.requestId;
     try {
       if (message.type === 'create_room') {
+        this.requireCompatibleClient(message.payload);
         const session = this.manager.createRoom({ name: message.payload?.name });
         await this.bindSession(clientId, session);
         await this.send(clientId, { type: 'session', requestId, payload: session });
         await this.broadcastRoom(session.code);
       } else if (message.type === 'join_room') {
+        this.requireCompatibleClient(message.payload);
         const session = this.manager.joinRoom({ code: message.payload?.code, name: message.payload?.name });
         await this.bindSession(clientId, session);
         await this.send(clientId, { type: 'session', requestId, payload: session });
         await this.broadcastRoom(session.code);
       } else if (message.type === 'reconnect') {
+        this.requireCompatibleClient(message.payload);
         const session = this.manager.reconnect(message.payload || {});
         await this.bindSession(clientId, session);
         await this.send(clientId, { type: 'session', requestId, payload: session });
@@ -83,6 +94,11 @@ export class PhoneLanHostController {
         const session = this.requireSession(clientId);
         const snapshot = await this.manager.setReady(session.code, session.token, message.payload?.ready);
         await this.send(clientId, { type: 'ready_ack', requestId, payload: { ready: Boolean(message.payload?.ready), started: Boolean(snapshot.game) } });
+        await this.broadcastRoom(session.code);
+      } else if (message.type === 'rematch') {
+        const session = this.requireSession(clientId);
+        const snapshot = await this.manager.setRematch(session.code, session.token, message.payload?.ready);
+        await this.send(clientId, { type: 'rematch_ack', requestId, payload: { ready: Boolean(message.payload?.ready), started: snapshot.game?.phase === 'bidding' } });
         await this.broadcastRoom(session.code);
       } else if (message.type === 'action') {
         const session = this.requireSession(clientId);
@@ -143,7 +159,10 @@ export class PhoneLanHostController {
   async stop() {
     if (this.pruneTimer) window.clearInterval(this.pruneTimer);
     this.pruneTimer = null;
-    if (this.started) await PhoneLanHostPlugin.stop().catch(() => {});
+    if (this.started) {
+      await Promise.allSettled([...this.sessions.keys()].map((clientId) => this.send(clientId, { type: 'host_closing', message: '房主已结束本机房间' })));
+      await PhoneLanHostPlugin.stop().catch(() => {});
+    }
     this.started = false;
     this.sessions.clear();
     await this.removeListeners();

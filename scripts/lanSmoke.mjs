@@ -1,4 +1,6 @@
 import WebSocket from 'ws';
+import { LanClient } from '../src/lanClient.js';
+import { LAN_PROTOCOL_VERSION, protocolPayload } from '../src/lanProtocol.js';
 
 const url = process.env.LAN_WS_URL || 'ws://127.0.0.1:4174/ws';
 
@@ -47,11 +49,12 @@ class SmokeClient {
 }
 
 const clients = [new SmokeClient('host'), new SmokeClient('apple'), new SmokeClient('android')];
+let automaticClient = null;
 try {
   const [host, apple, android] = clients;
-  const hostSession = await host.request('create_room', { name: '房主' });
-  await apple.request('join_room', { code: hostSession.code, name: '苹果玩家' });
-  await android.request('join_room', { code: hostSession.code, name: '安卓玩家' });
+  const hostSession = await host.request('create_room', protocolPayload({ name: '房主' }));
+  const appleSession = await apple.request('join_room', protocolPayload({ code: hostSession.code, name: '苹果玩家' }));
+  await android.request('join_room', protocolPayload({ code: hostSession.code, name: '安卓玩家' }));
   await Promise.all(clients.map((client) => client.waitFor((state) => state?.players?.length === 3)));
   await Promise.all(clients.map((client) => client.request('ready', { ready: true })));
   await Promise.all(clients.map((client) => client.waitFor((state) => state?.game?.phase === 'bidding')));
@@ -67,7 +70,37 @@ try {
 
   const duplicate = await host.request('action', { seq: 1, stateVersion: 3, action: { type: 'pass' } });
   if (!duplicate.duplicate) throw new Error('duplicate action was not acknowledged idempotently');
-  console.log(JSON.stringify({ room: hostSession.code, players: 3, stateVersion: 3, landlord: 0, hiddenInformationProtected: true, duplicateSafe: true }));
+  apple.close();
+  const restoredApple = new SmokeClient('apple-restored');
+  clients.push(restoredApple);
+  const restoredSession = await restoredApple.request('reconnect', protocolPayload(appleSession));
+  if (restoredSession.seat !== appleSession.seat) throw new Error('reconnect did not restore the original seat');
+  await restoredApple.waitFor((state) => state?.game?.stateVersion === 3);
+
+  const oldClient = new SmokeClient('old-client');
+  clients.push(oldClient);
+  let versionRejected = false;
+  try { await oldClient.request('create_room', { name: '旧版本' }); } catch (error) { versionRejected = error.code === 'PROTOCOL_MISMATCH'; }
+  if (!versionRejected) throw new Error('incompatible client protocol was not rejected');
+
+  globalThis.WebSocket = WebSocket;
+  const statuses = [];
+  let syncedStates = 0;
+  automaticClient = new LanClient({
+    url,
+    onStatus: (status) => statuses.push(status),
+    onMessage: (message) => { if (message.type === 'room_state') syncedStates += 1; },
+  });
+  await automaticClient.connect();
+  await automaticClient.createRoom('自动重连测试');
+  await automaticClient.sync();
+  automaticClient.socket.terminate();
+  const reconnectStarted = Date.now();
+  while (!(statuses.at(-1) === 'connected' && statuses.includes('reconnecting') && syncedStates >= 2) && Date.now() - reconnectStarted < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
+  if (statuses.at(-1) !== 'connected' || !statuses.includes('reconnecting') || syncedStates < 2) throw new Error('LanClient did not reconnect and synchronize automatically');
+
+  console.log(JSON.stringify({ room: hostSession.code, players: 3, protocolVersion: LAN_PROTOCOL_VERSION, stateVersion: 3, landlord: 0, hiddenInformationProtected: true, duplicateSafe: true, reconnectSafe: true, autoReconnectSafe: true, oldVersionRejected: true }));
 } finally {
+  automaticClient?.close();
   clients.forEach((client) => client.close());
 }

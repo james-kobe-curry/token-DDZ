@@ -5,6 +5,7 @@ import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import { LanRoomManager, RoomError } from './roomManager.mjs';
+import { LAN_CLIENT_VERSION, LAN_PROTOCOL_VERSION } from '../src/lanProtocol.js';
 
 const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const distRoot = resolve(projectRoot, 'dist');
@@ -12,6 +13,10 @@ const port = Number(process.env.LAN_PORT || 4174);
 const host = process.env.LAN_HOST || '0.0.0.0';
 const manager = new LanRoomManager();
 const sessions = new Map();
+
+function requireCompatibleClient(payload = {}) {
+  if (payload.protocolVersion !== LAN_PROTOCOL_VERSION) throw new RoomError('PROTOCOL_MISMATCH', `联机版本不兼容，请将三台设备都升级到 ${LAN_CLIENT_VERSION}`);
+}
 
 if (!existsSync(resolve(distRoot, 'index.html'))) throw new Error('dist/index.html is missing; run npm run build before npm run lan:serve');
 
@@ -54,7 +59,7 @@ const httpServer = createServer((request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
   if (url.pathname === '/api/health') {
     response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-    response.end(JSON.stringify({ ok: true, protocolVersion: 1, rooms: manager.rooms.size, addresses: lanAddresses() }));
+    response.end(JSON.stringify({ ok: true, protocolVersion: LAN_PROTOCOL_VERSION, clientVersion: LAN_CLIENT_VERSION, rooms: manager.rooms.size, addresses: lanAddresses() }));
     return;
   }
   let pathname;
@@ -69,7 +74,7 @@ const httpServer = createServer((request, response) => {
 const websocketServer = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 16 * 1024, perMessageDeflate: false });
 websocketServer.on('connection', (socket) => {
   socket.alive = true;
-  send(socket, { type: 'hello', payload: { protocolVersion: 1, heartbeatMs: 10000 } });
+  send(socket, { type: 'hello', payload: { protocolVersion: LAN_PROTOCOL_VERSION, clientVersion: LAN_CLIENT_VERSION, heartbeatMs: 10000 } });
   socket.on('pong', () => { socket.alive = true; });
   socket.on('message', (raw) => {
     let message;
@@ -77,16 +82,19 @@ websocketServer.on('connection', (socket) => {
     const requestId = message.requestId;
     try {
       if (message.type === 'create_room') {
+        requireCompatibleClient(message.payload);
         const session = manager.createRoom({ name: message.payload?.name });
         bindSession(socket, session);
         send(socket, { type: 'session', requestId, payload: session });
         broadcastRoom(session.code);
       } else if (message.type === 'join_room') {
+        requireCompatibleClient(message.payload);
         const session = manager.joinRoom({ code: message.payload?.code, name: message.payload?.name });
         bindSession(socket, session);
         send(socket, { type: 'session', requestId, payload: session });
         broadcastRoom(session.code);
       } else if (message.type === 'reconnect') {
+        requireCompatibleClient(message.payload);
         const session = manager.reconnect(message.payload || {});
         bindSession(socket, session);
         send(socket, { type: 'session', requestId, payload: session });
@@ -96,6 +104,12 @@ websocketServer.on('connection', (socket) => {
         if (!session) throw new RoomError('NO_SESSION', '请先创建或加入房间');
         const snapshot = manager.setReady(session.code, session.token, message.payload?.ready);
         send(socket, { type: 'ready_ack', requestId, payload: { ready: Boolean(message.payload?.ready), started: Boolean(snapshot.game) } });
+        broadcastRoom(session.code);
+      } else if (message.type === 'rematch') {
+        const session = sessions.get(socket);
+        if (!session) throw new RoomError('NO_SESSION', '请先创建或加入房间');
+        const snapshot = manager.setRematch(session.code, session.token, message.payload?.ready);
+        send(socket, { type: 'rematch_ack', requestId, payload: { ready: Boolean(message.payload?.ready), started: snapshot.game?.phase === 'bidding' } });
         broadcastRoom(session.code);
       } else if (message.type === 'action') {
         const session = sessions.get(socket);
@@ -129,6 +143,9 @@ const heartbeat = setInterval(() => {
   }
   manager.prune();
 }, 10000);
+const roomClock = setInterval(() => {
+  for (const code of manager.tick()) broadcastRoom(code);
+}, 1000);
 
 httpServer.listen(port, host, () => {
   console.log(`Token 斗地主局域网服务已启动：\n${lanAddresses().map((address) => `  ${address}`).join('\n') || `  http://localhost:${port}`}`);
@@ -136,6 +153,7 @@ httpServer.listen(port, host, () => {
 
 function shutdown() {
   clearInterval(heartbeat);
+  clearInterval(roomClock);
   websocketServer.close(() => httpServer.close());
 }
 process.on('SIGINT', shutdown);
