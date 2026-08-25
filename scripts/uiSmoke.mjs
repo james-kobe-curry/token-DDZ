@@ -131,6 +131,7 @@ try {
   const neuralDecision = await evaluate("document.querySelector('.opponent-left .opponent-meta span')?.title || ''");
 
   let lanRoom = null;
+  let lanBotAdded = false;
   if (lanUrl) {
     await evaluate("document.querySelector('.room-brand .icon-btn')?.click(); true");
     await waitFor("Boolean(document.querySelector('.mode-card.friend'))", 'friend room entry did not render');
@@ -140,9 +141,13 @@ try {
     await evaluate("document.querySelector('.lan-create-row .btn-primary').click(); true");
     await waitFor("Boolean(document.querySelector('.lan-code b'))", 'LAN room could not be created');
     lanRoom = await evaluate("document.querySelector('.lan-code b').textContent");
+    await waitFor("Boolean(document.querySelector('.lan-bot-controls button.add:not(:disabled)'))", 'LAN bot fill control did not render for the host');
+    await evaluate("document.querySelector('.lan-bot-controls button.add').click(); true");
+    await waitFor("Boolean(document.querySelector('.lan-player-list > .bot'))", 'LAN bot was not added to the empty seat');
+    lanBotAdded = true;
   }
 
-  console.log(JSON.stringify({ resultExit: true, swipeCount, persistedCount, restoredCount, hintOptions: optionCount, hintAdvanced: optionCount <= 1 || firstHint !== secondHint, neuralDecision, lanRoom }));
+  console.log(JSON.stringify({ resultExit: true, swipeCount, persistedCount, restoredCount, hintOptions: optionCount, hintAdvanced: optionCount <= 1 || firstHint !== secondHint, neuralDecision, lanRoom, lanBotAdded }));
 } finally {
   socket?.close();
   browser.kill();

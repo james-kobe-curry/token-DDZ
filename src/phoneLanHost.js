@@ -95,6 +95,11 @@ export class PhoneLanHostController {
         const snapshot = await this.manager.setReady(session.code, session.token, message.payload?.ready);
         await this.send(clientId, { type: 'ready_ack', requestId, payload: { ready: Boolean(message.payload?.ready), started: Boolean(snapshot.game) } });
         await this.broadcastRoom(session.code);
+      } else if (message.type === 'bots') {
+        const session = this.requireSession(clientId);
+        const snapshot = await this.manager.setBots(session.code, session.token, message.payload?.count);
+        await this.send(clientId, { type: 'bots_ack', requestId, payload: { count: snapshot.players.filter((player) => player.isBot).length, started: Boolean(snapshot.game) } });
+        await this.broadcastRoom(session.code);
       } else if (message.type === 'rematch') {
         const session = this.requireSession(clientId);
         const snapshot = await this.manager.setRematch(session.code, session.token, message.payload?.ready);

@@ -105,6 +105,12 @@ websocketServer.on('connection', (socket) => {
         const snapshot = manager.setReady(session.code, session.token, message.payload?.ready);
         send(socket, { type: 'ready_ack', requestId, payload: { ready: Boolean(message.payload?.ready), started: Boolean(snapshot.game) } });
         broadcastRoom(session.code);
+      } else if (message.type === 'bots') {
+        const session = sessions.get(socket);
+        if (!session) throw new RoomError('NO_SESSION', '请先创建或加入房间');
+        const snapshot = manager.setBots(session.code, session.token, message.payload?.count);
+        send(socket, { type: 'bots_ack', requestId, payload: { count: snapshot.players.filter((player) => player.isBot).length, started: Boolean(snapshot.game) } });
+        broadcastRoom(session.code);
       } else if (message.type === 'rematch') {
         const session = sessions.get(socket);
         if (!session) throw new RoomError('NO_SESSION', '请先创建或加入房间');

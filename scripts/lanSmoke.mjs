@@ -53,15 +53,17 @@ let automaticClient = null;
 try {
   const [host, apple, android] = clients;
   const hostSession = await host.request('create_room', protocolPayload({ name: '房主' }));
+  await host.request('bots', { count: 2 });
+  await host.waitFor((state) => state?.players?.filter((player) => player.isBot).length === 2);
   const appleSession = await apple.request('join_room', protocolPayload({ code: hostSession.code, name: '苹果玩家' }));
   await android.request('join_room', protocolPayload({ code: hostSession.code, name: '安卓玩家' }));
-  await Promise.all(clients.map((client) => client.waitFor((state) => state?.players?.length === 3)));
+  await Promise.all(clients.map((client) => client.waitFor((state) => state?.players?.length === 3 && state.players.every((player) => !player.isBot))));
   await Promise.all(clients.map((client) => client.request('ready', { ready: true })));
   await Promise.all(clients.map((client) => client.waitFor((state) => state?.game?.phase === 'bidding')));
 
   await host.request('action', { seq: 1, stateVersion: 0, action: { type: 'bid', score: 1 } });
-  await android.request('action', { seq: 1, stateVersion: 1, action: { type: 'bid', score: 0 } });
-  await apple.request('action', { seq: 1, stateVersion: 2, action: { type: 'bid', score: 0 } });
+  await apple.request('action', { seq: 1, stateVersion: 1, action: { type: 'bid', score: 0 } });
+  await android.request('action', { seq: 1, stateVersion: 2, action: { type: 'bid', score: 0 } });
   await Promise.all(clients.map((client) => client.waitFor((state) => state?.game?.phase === 'playing' && state.game.stateVersion === 3)));
 
   if (host.state.game.selfHand.length !== 20) throw new Error('landlord did not receive the bottom cards');
@@ -99,7 +101,7 @@ try {
   while (!(statuses.at(-1) === 'connected' && statuses.includes('reconnecting') && syncedStates >= 2) && Date.now() - reconnectStarted < 6000) await new Promise((resolve) => setTimeout(resolve, 100));
   if (statuses.at(-1) !== 'connected' || !statuses.includes('reconnecting') || syncedStates < 2) throw new Error('LanClient did not reconnect and synchronize automatically');
 
-  console.log(JSON.stringify({ room: hostSession.code, players: 3, protocolVersion: LAN_PROTOCOL_VERSION, stateVersion: 3, landlord: 0, hiddenInformationProtected: true, duplicateSafe: true, reconnectSafe: true, autoReconnectSafe: true, oldVersionRejected: true }));
+  console.log(JSON.stringify({ room: hostSession.code, players: 3, protocolVersion: LAN_PROTOCOL_VERSION, stateVersion: 3, landlord: 0, botFillProtocol: true, humansReplaceBots: true, hiddenInformationProtected: true, duplicateSafe: true, reconnectSafe: true, autoReconnectSafe: true, oldVersionRejected: true }));
 } finally {
   automaticClient?.close();
   clients.forEach((client) => client.close());

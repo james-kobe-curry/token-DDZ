@@ -1511,11 +1511,18 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
 .lan-player-list { display: grid; gap: 8px; }
 .lan-player-list > div { min-height: 62px; padding: 8px 15px; display: grid; grid-template-columns: 36px 1fr 24px; align-items: center; gap: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 15px; text-align: left; background: rgba(255,255,255,.025); }
 .lan-player-list > div.ready { border-color: rgba(104,220,159,.22); background: rgba(85,199,139,.065); }
+.lan-player-list > div.bot { border-color:rgba(219,185,111,.26);background:linear-gradient(90deg,rgba(204,158,69,.09),rgba(85,199,139,.035)); }
 .lan-player-list > div > i { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #e5cb91; background: #173a2e; font-style: normal; font-weight: 800; }
+.lan-player-list > div.bot > i { color:#3b2a11;background:linear-gradient(145deg,#f1d28c,#b98232);box-shadow:0 4px 13px rgba(185,129,45,.2); }
 .lan-player-list span { display: flex; flex-direction: column; }
 .lan-player-list strong { color: #eff5f1; font-size: 14px; }
+.lan-player-list strong em { margin-left:7px;padding:2px 5px;border:1px solid rgba(231,196,118,.28);border-radius:5px;color:#efd18b;font-size:8px;font-style:normal;vertical-align:2px; }
 .lan-player-list small { margin-top: 4px; color: #859c91; font-size: 10px; }
 .lan-player-list svg { color: #75dba5; }
+.lan-bot-controls { margin-top:10px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;border:1px solid rgba(229,194,118,.16);border-radius:14px;text-align:left;background:rgba(0,0,0,.12); }
+.lan-bot-controls > span { display:flex;flex-direction:column; }.lan-bot-controls > span small { color:#8ca198;font-size:7px;letter-spacing:.16em; }.lan-bot-controls > span strong { margin-top:2px;color:#e8d4a8;font-size:11px; }.lan-bot-controls > span em { color:#77dba6;font-style:normal; }
+.lan-bot-controls button { min-width:64px;height:34px;padding:0 10px;border:1px solid rgba(227,199,140,.16);border-radius:10px;color:#c9d6d0;background:#17392d;font-size:9px;font-weight:800;cursor:pointer; }.lan-bot-controls button.add { min-width:112px;border-color:rgba(232,196,118,.3);color:#36240c;background:linear-gradient(145deg,#efd18b,#bc8534); }.lan-bot-controls button:disabled { opacity:.38;cursor:not-allowed; }
+.lan-bot-note { margin-top:9px;padding:8px 11px;border-radius:11px;color:#b9c7c0;background:rgba(224,188,110,.06);font-size:9px; }
 .lan-ready { width: 100%; min-height: 50px; margin-top: 18px; font-size: 15px; }
 .lan-connect-card > footer { min-height: 23px; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #81988d; font-size: 10px; }
 .lan-connect-card > footer b { margin-left: 6px; color: #e98d83; font-weight: 600; }
@@ -1544,6 +1551,7 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
 .lan-seat-right { right:3.5%; flex-direction:row-reverse; text-align:right; }
 .lan-seat.active,.lan-self-seat.active { border-color:rgba(242,202,112,.78); box-shadow:0 0 0 3px rgba(231,190,99,.09),0 0 28px rgba(229,188,94,.22); animation:lanActive 1.8s ease-in-out infinite; }
 .lan-avatar { width:52px; height:52px; flex:none; display:grid; place-items:center; border-radius:15px; color:#f4dca7; background:linear-gradient(145deg,#9c4037,#4f1919); box-shadow:inset 0 0 0 2px rgba(244,202,124,.2); font-size:21px; font-weight:800; }
+.lan-seat.bot-seat { border-color:rgba(231,197,124,.25); }.lan-seat.bot-seat .lan-avatar { color:#38240c;background:linear-gradient(145deg,#efd187,#ae742b);box-shadow:inset 0 0 0 2px rgba(255,242,195,.24),0 7px 18px rgba(160,102,31,.2); }
 .lan-seat > span:nth-child(2) { display:flex; flex-direction:column; }
 .lan-seat strong { font-size:13px; }
 .lan-seat small,.lan-self-seat small { margin-top:5px; color:#9eb1a7; font-size:9px; }
@@ -1610,7 +1618,7 @@ button:disabled { cursor: not-allowed !important; opacity: .48; }
   .lan-notice { bottom:131px;padding:5px 10px;font-size:8px; }
   .lan-hand { width:min(83vw,860px);height:88px;bottom:0;padding-right:clamp(34px,calc((var(--hand-count) - 10) * 3px),56px); }
   .lan-hand .poker-card { width:58px;height:84px;margin-right:clamp(-40px,calc((var(--hand-count) - 10) * -1.8px),-20px);padding:5px; }.lan-hand .poker-card.selected { transform:translateY(-14px); }.lan-hand .card-rank { font-size:16px; }.lan-hand .card-suit { font-size:10px; }.lan-hand .card-center { font-size:21px; }
-  .lan-connect-card { min-height:0;max-height:calc(100dvh - 14px);overflow:auto;padding:20px 40px 13px;border-radius:20px; }.lan-connect-card > .room-seal { width:38px;height:38px;font-size:18px; }.lan-connect-card > small { margin-top:7px;font-size:7px; }.lan-connect-card h1 { margin:3px 0 5px;font-size:25px; }.lan-connect-card > p { margin-bottom:10px;font-size:10px;line-height:1.45; }.lan-field span { margin-bottom:4px;font-size:9px; }.lan-field input,.lan-create-row input { height:36px; }.lan-create-row { margin-top:9px; }.lan-create-row .btn { min-height:36px; }.lan-reconnect { margin-top:8px; }.lan-connect-card > footer { margin-top:8px; }.lan-code { margin:7px auto;padding:6px 12px; }.lan-code b { font-size:19px; }.lan-player-list { gap:4px; }.lan-player-list > div { min-height:39px;padding:3px 10px; }.lan-player-list > div > i { width:27px;height:27px; }.lan-player-list small { margin-top:1px; }.lan-ready { min-height:37px;margin-top:8px; }
+  .lan-connect-card { min-height:0;max-height:calc(100dvh - 14px);overflow:auto;padding:20px 40px 13px;border-radius:20px; }.lan-connect-card > .room-seal { width:38px;height:38px;font-size:18px; }.lan-connect-card > small { margin-top:7px;font-size:7px; }.lan-connect-card h1 { margin:3px 0 5px;font-size:25px; }.lan-connect-card > p { margin-bottom:10px;font-size:10px;line-height:1.45; }.lan-field span { margin-bottom:4px;font-size:9px; }.lan-field input,.lan-create-row input { height:36px; }.lan-create-row { margin-top:9px; }.lan-create-row .btn { min-height:36px; }.lan-reconnect { margin-top:8px; }.lan-connect-card > footer { margin-top:8px; }.lan-code { margin:7px auto;padding:6px 12px; }.lan-code b { font-size:19px; }.lan-player-list { gap:4px; }.lan-player-list > div { min-height:39px;padding:3px 10px; }.lan-player-list > div > i { width:27px;height:27px; }.lan-player-list small { margin-top:1px; }.lan-bot-controls { margin-top:5px;padding:5px 8px; }.lan-bot-controls button { height:28px; }.lan-ready { min-height:37px;margin-top:6px; }
   .lan-phone-host { min-height:38px;margin-bottom:7px;font-size:11px; }.lan-divider { margin-bottom:7px; }.lan-native-note { display:none!important; }.lan-host-share { margin:-3px auto 6px;padding:5px 9px; }
 }
 

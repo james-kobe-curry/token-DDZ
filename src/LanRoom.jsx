@@ -61,9 +61,9 @@ function CardFace({ card, selected = false, onClick, onPointerDown, onKeyDown, c
 
 function Seat({ player, cards, active, side, landlord, action, seconds }) {
   return (
-    <div className={`lan-seat lan-seat-${side} ${active ? 'active' : ''}`}>
-      <span className="lan-avatar">{player?.name?.slice(0, 1) || '?'}</span>
-      <span><strong>{player?.name || '等待加入'}</strong><small>{player ? `${player.connected ? '在线' : '重连中'} · ${cards} 张` : '空座位'}</small></span>
+    <div className={`lan-seat lan-seat-${side} ${active ? 'active' : ''} ${player?.isBot ? 'bot-seat' : ''}`}>
+      <span className="lan-avatar">{player?.isBot ? '机' : player?.name?.slice(0, 1) || '?'}</span>
+      <span><strong>{player?.name || '等待加入'}</strong><small>{player ? `${player.isBot ? '大师人机' : player.connected ? '在线' : '重连中'} · ${cards} 张` : '空座位'}</small></span>
       {landlord && <i>地主</i>}
       {active && <em className={`lan-seat-timer ${seconds <= 5 ? 'urgent' : ''}`}>{seconds}</em>}
       {action && <b className="lan-action-bubble">{action}</b>}
@@ -122,7 +122,7 @@ function LanMatch({ room, client, status, onExit }) {
     const action = game.lastAction;
     if (!action) return undefined;
     const label = action.type === 'bid' ? (action.score ? `${action.score} 分` : '不叫') : action.type === 'pass' ? '不出' : playNames[action.combo?.type] || '出牌';
-    setActionBubble({ player: action.player, label: action.automated ? `托管 · ${label}` : label });
+    setActionBubble({ player: action.player, label: action.bot ? `人机 · ${label}` : action.automated ? `托管 · ${label}` : label });
     const special = ['bomb', 'rocket'].includes(action.combo?.type);
     if (effects.soundOn) playLanCue(special ? 'bomb' : action.type === 'pass' ? 'pass' : 'action');
     if (special) setImpact(true);
@@ -250,8 +250,9 @@ function LanMatch({ room, client, status, onExit }) {
   if (game.phase === 'ended') {
     const won = game.winner === self || (game.landlord !== self && game.winner !== game.landlord);
     const selfPlayer = playerAt(self);
-    const rematchCount = room.players.filter((player) => player.rematchReady).length;
-    return <main className="lan-result"><div><span className="room-seal">斗</span><small>局域网牌局结束</small><h1>{won ? '本方获胜' : '本方落败'}</h1><p>胜者：{playerAt(game.winner)?.name} · 最终倍数 ×{game.multiplier}{game.spring ? ` · ${game.spring === 'spring' ? '春天' : '反春天'}` : ''}</p>{resultNotice && <b className="lan-result-error">{resultNotice}</b>}<div className="lan-result-actions"><button className={`btn ${selfPlayer?.rematchReady ? 'btn-ghost' : 'btn-primary'}`} disabled={busy || status !== 'connected'} onClick={async () => { setBusy(true); setResultNotice(''); try { await client.setRematch(!selfPlayer?.rematchReady); } catch (error) { setResultNotice(error.message || '操作失败，请重试'); } finally { setBusy(false); } }}>{selfPlayer?.rematchReady ? '取消再来一局' : '再来一局'} · {rematchCount}/3</button><button className="btn btn-ghost" onClick={onExit}>返回大厅</button></div></div></main>;
+    const humanPlayers = room.players.filter((player) => !player.isBot);
+    const rematchCount = humanPlayers.filter((player) => player.rematchReady).length;
+    return <main className="lan-result"><div><span className="room-seal">斗</span><small>局域网牌局结束</small><h1>{won ? '本方获胜' : '本方落败'}</h1><p>胜者：{playerAt(game.winner)?.name} · 最终倍数 ×{game.multiplier}{game.spring ? ` · ${game.spring === 'spring' ? '春天' : '反春天'}` : ''}</p>{resultNotice && <b className="lan-result-error">{resultNotice}</b>}<div className="lan-result-actions"><button className={`btn ${selfPlayer?.rematchReady ? 'btn-ghost' : 'btn-primary'}`} disabled={busy || status !== 'connected'} onClick={async () => { setBusy(true); setResultNotice(''); try { await client.setRematch(!selfPlayer?.rematchReady); } catch (error) { setResultNotice(error.message || '操作失败，请重试'); } finally { setBusy(false); } }}>{selfPlayer?.rematchReady ? '取消再来一局' : '再来一局'} · {rematchCount}/{humanPlayers.length}</button><button className="btn btn-ghost" onClick={onExit}>返回大厅</button></div></div></main>;
   }
 
   const confirmExit = () => {
@@ -309,6 +310,7 @@ export default function LanRoom({ profile, onExit }) {
   const [error, setError] = useState('');
   const [hostInfo, setHostInfo] = useState(null);
   const [hostBusy, setHostBusy] = useState(false);
+  const [lobbyBusy, setLobbyBusy] = useState(false);
   const savedSession = useMemo(() => readLanSession(), []);
   const clientRef = useRef(null);
   const hostControllerRef = useRef(null);
@@ -363,7 +365,19 @@ export default function LanRoom({ profile, onExit }) {
     }
   };
 
+  const changeBots = async (count) => {
+    if (!clientRef.current || lobbyBusy) return;
+    setError('');
+    setLobbyBusy(true);
+    try { await clientRef.current.setBots(count); } catch (reason) { setError(reason.message || '调整人机失败'); } finally { setLobbyBusy(false); }
+  };
+
   if (room?.game) return <LanMatch room={room} client={clientRef.current} status={status} onExit={onExit} />;
+
+  const selfLobbyPlayer = room?.players.find((player) => player.seat === room.selfPlayer);
+  const botCount = room?.players.filter((player) => player.isBot).length || 0;
+  const isRoomHost = room?.selfPlayer === 0;
+  const canAddBot = Boolean(room && botCount < 2 && (room.players.length < 3 || room.players.some((player) => !player.isBot && player.seat !== 0 && !player.connected)));
 
   return (
     <main className="lan-lobby">
@@ -373,7 +387,7 @@ export default function LanRoom({ profile, onExit }) {
         <span className="room-seal">友</span>
         <small>LOCAL NETWORK · BETA</small>
         <h1>{room ? `房间 ${room.code}` : '局域网好友房'}</h1>
-        {!room ? <p>{androidHostCapable ? '本机可直接担任房主；另外两台设备连接同一 Wi-Fi 或本机热点后即可加入。' : '连接同一 Wi-Fi 下的 Android 房主，输入服务地址和六位房间码即可加入。'}</p> : <p>三名玩家全部准备后，房主手机会生成唯一权威牌局。</p>}
+        {!room ? <p>{androidHostCapable ? '本机可直接担任房主；另外两台设备连接同一 Wi-Fi 或本机热点后即可加入。' : '连接同一 Wi-Fi 下的 Android 房主，输入服务地址和六位房间码即可加入。'}</p> : <p>三席就位且真人玩家全部准备后开局；人数不足时房主可用大师人机补位。</p>}
 
         {!room ? (
           <>
@@ -388,8 +402,10 @@ export default function LanRoom({ profile, onExit }) {
           <>
             <div className="lan-code"><span>房间码</span><b>{room.code}</b><button onClick={() => navigator.clipboard?.writeText(room.code)}>复制</button></div>
             {hostInfo && <div className="lan-host-share"><span>牌友浏览器打开</span><b>{hostInfo.httpAddresses?.[0] || '请先连接 Wi-Fi 或开启热点'}</b>{hostInfo.httpAddresses?.[0] && <button onClick={() => navigator.clipboard?.writeText(hostInfo.httpAddresses[0])}>复制地址</button>}</div>}
-            <div className="lan-player-list">{[0, 1, 2].map((seat) => { const player = room.players.find((item) => item.seat === seat); return <div key={seat} className={player?.ready ? 'ready' : ''}><i>{seat + 1}</i><span><strong>{player?.name || '等待牌友加入'}</strong><small>{player ? player.ready ? '已准备' : player.connected ? '在线 · 未准备' : '等待重连' : '空座位'}</small></span>{player?.ready && <Icon name="check" />}</div>; })}</div>
-            <button className="btn btn-primary lan-ready" onClick={() => { setError(''); clientRef.current.setReady(!room.players.find((player) => player.seat === room.selfPlayer)?.ready).catch((reason) => setError(reason.message)); }}>{room.players.find((player) => player.seat === room.selfPlayer)?.ready ? '取消准备' : '准备开局'}</button>
+            <div className="lan-player-list">{[0, 1, 2].map((seat) => { const player = room.players.find((item) => item.seat === seat); return <div key={seat} className={`${player?.ready ? 'ready' : ''} ${player?.isBot ? 'bot' : ''}`}><i>{player?.isBot ? '机' : seat + 1}</i><span><strong>{player?.name || '等待牌友加入'}{player?.isBot && <em>AI</em>}</strong><small>{player ? player.isBot ? '大师人机 · 自动准备' : player.ready ? '已准备' : player.connected ? '在线 · 未准备' : '等待重连' : '空座位'}</small></span>{player?.ready && <Icon name="check" />}</div>; })}</div>
+            {isRoomHost && <div className="lan-bot-controls"><span><small>AI SEATS</small><strong>人机补位 <em>{botCount}/2</em></strong></span><button disabled={lobbyBusy || botCount === 0} onClick={() => changeBots(botCount - 1)}>移除</button><button className="add" disabled={lobbyBusy || !canAddBot} onClick={() => changeBots(botCount + 1)}>+ 添加大师人机</button></div>}
+            {!isRoomHost && botCount > 0 && <div className="lan-bot-note">房主已补入 {botCount} 位大师人机，真人加入会优先替换未开局的人机。</div>}
+            <button className="btn btn-primary lan-ready" disabled={lobbyBusy || status !== 'connected'} onClick={() => { setError(''); clientRef.current.setReady(!selfLobbyPlayer?.ready).catch((reason) => setError(reason.message)); }}>{selfLobbyPlayer?.ready ? '取消准备' : '准备开局'}</button>
           </>
         )}
         <footer><i className={`connection-dot ${status}`} /> {status === 'connected' ? '已连接房主' : status === 'connecting' ? '正在连接' : status === 'reconnecting' ? '正在自动重连' : status === 'incompatible' ? '版本不兼容' : status === 'error' ? '连接失败' : '等待连接'}{error && <b>{error}</b>}</footer>

@@ -64,3 +64,20 @@ test('安卓房主不会让已准备但掉线的座位启动牌局', async () =>
   assert.equal(view.game, null);
   assert.equal(view.players[1].ready, false);
 });
+
+test('安卓手机房主可补入人机并由房主权威引擎自动行动', async () => {
+  let now = 1000;
+  const manager = new HostRoomManager({ now: () => now });
+  const host = manager.createRoom({ name: '安卓房主' });
+  const guest = manager.joinRoom({ code: host.code, name: '苹果牌友' });
+  await manager.setBots(host.code, host.token, 1);
+  await manager.setReady(host.code, host.token, true);
+  await manager.setReady(host.code, guest.token, true);
+  const lobbyFilled = manager.snapshot(host.code, host.token);
+  assert.equal(lobbyFilled.players.find((player) => player.isBot)?.difficulty, 'master');
+  await manager.performAction(host.code, host.token, { seq: 1, stateVersion: 0, action: { type: 'bid', score: 1 } });
+  assert.deepEqual(await manager.tick(), [host.code]);
+  const afterBot = manager.snapshot(host.code, guest.token).game;
+  assert.equal(afterBot.stateVersion, 2);
+  assert.equal(afterBot.lastAction.bot, true);
+});

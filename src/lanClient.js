@@ -121,6 +121,7 @@ export class LanClient {
   joinRoom(code, name) { return this.request('join_room', protocolPayload({ code, name })); }
   reconnect(session = this.loadSession()) { return this.request('reconnect', protocolPayload(session || {})); }
   setReady(ready) { return this.request('ready', { ready }); }
+  setBots(count) { return this.request('bots', { count }); }
   setRematch(ready) { return this.request('rematch', { ready }); }
   sync() { return this.request('sync'); }
   act(action, stateVersion) { return this.request('action', { seq: ++this.seq, stateVersion, action }); }
