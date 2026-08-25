@@ -1,7 +1,7 @@
 {
   "name": "token-landlords",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -12,6 +12,7 @@
     "lan:serve": "node server/lanServer.mjs",
     "smoke:lan": "node scripts/lanSmoke.mjs",
     "benchmark:ai": "node scripts/aiBenchmark.mjs",
+    "benchmark:douzero": "node scripts/douzeroBenchmark.mjs",
     "smoke:ui": "node scripts/uiSmoke.mjs",
     "test": "node --test",
     "preview": "vite preview --host 0.0.0.0"
@@ -22,6 +23,7 @@
     "@capacitor/core": "8.5.0",
     "@capacitor/haptics": "8.0.2",
     "@vitejs/plugin-react": "6.1.0",
+    "onnxruntime-web": "1.23.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "vite": "8.2.2",

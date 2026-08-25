@@ -17,6 +17,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run benchmark:ai
+      - run: npm run benchmark:douzero
       - run: npm run build
       - name: Browser and LAN smoke tests
         run: |

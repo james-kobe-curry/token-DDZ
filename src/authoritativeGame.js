@@ -45,6 +45,10 @@ export function createAuthoritativeGame({ seed = createSeed(), commit = '' } = {
     spring: null,
     playCounts: [0, 0, 0],
     playedCards: [],
+    playedByPlayer: [[], [], []],
+    lastMoves: [[], [], []],
+    actionHistory: [],
+    bombCount: 0,
     lastAction: null,
     turnDeadline: 0,
   };
@@ -123,6 +127,10 @@ function applyPlay(state, action) {
     lastActor: action.player,
     passCount: 0,
     playedCards: [...state.playedCards, ...cards],
+    playedByPlayer: (state.playedByPlayer || [[], [], []]).map((played, player) => player === action.player ? [...played, ...cards] : played),
+    lastMoves: (state.lastMoves || [[], [], []]).map((move, player) => player === action.player ? cards : move),
+    actionHistory: [...(state.actionHistory || []), { player: action.player, cards }].slice(-15),
+    bombCount: (state.bombCount || 0) + (['bomb', 'rocket'].includes(combo.type) ? 1 : 0),
     lastAction: { type: 'play', player: action.player, cards, combo: { ...combo, cards: undefined } },
   };
 }
@@ -132,10 +140,14 @@ function applyPass(state, action) {
   reject(state.current !== action.player, 'NOT_YOUR_TURN', '还没有轮到该玩家操作');
   reject(!state.lastPlay, 'CANNOT_PASS', '拥有牌权时不能选择不出');
   const passCount = state.passCount + 1;
+  const publicHistory = {
+    lastMoves: (state.lastMoves || [[], [], []]).map((move, player) => player === action.player ? [] : move),
+    actionHistory: [...(state.actionHistory || []), { player: action.player, cards: [] }].slice(-15),
+  };
   if (passCount >= 2) {
-    return { ...state, current: state.lastPlay.player, lastPlay: null, passCount: 0, lastAction: { type: 'pass', player: action.player } };
+    return { ...state, ...publicHistory, current: state.lastPlay.player, lastPlay: null, passCount: 0, lastAction: { type: 'pass', player: action.player } };
   }
-  return { ...state, current: nextPlayerCounterClockwise(action.player), passCount, lastAction: { type: 'pass', player: action.player } };
+  return { ...state, ...publicHistory, current: nextPlayerCounterClockwise(action.player), passCount, lastAction: { type: 'pass', player: action.player } };
 }
 
 export function reduceAuthoritativeAction(state, action) {
@@ -175,6 +187,10 @@ export function projectGameForPlayer(state, player) {
     spring: state.spring,
     playCounts: state.playCounts,
     playedCards: state.playedCards,
+    playedByPlayer: state.playedByPlayer,
+    lastMoves: state.lastMoves,
+    actionHistory: state.actionHistory,
+    bombCount: state.bombCount,
     lastAction: state.lastAction,
     turnDeadline: state.turnDeadline || 0,
     commit: state.commit,

@@ -125,6 +125,11 @@ try {
   const secondHint = await evaluate("[...document.querySelectorAll('.player-hand .selected')].map((card) => card.dataset.cardId).join('|')");
   if (optionCount > 1 && firstHint === secondHint) throw new Error('smart hint did not advance');
 
+  await evaluate(`localStorage.setItem('token-landlords:match-settings:v2', JSON.stringify({ soundOn: false, voiceOn: false, vibrationOn: false, smartArrange: true, autoMatch: true, motionOn: false, aiDifficulty: 'super' })); true`);
+  await command('Page.navigate', { url: `${baseUrl}/?play=1&demo=waiting` });
+  await waitFor(`Boolean(document.querySelector('.opponent-left .opponent-meta span[title*="DouZero"]'))`, 'DouZero ONNX model did not complete a real browser decision', 30000);
+  const neuralDecision = await evaluate("document.querySelector('.opponent-left .opponent-meta span')?.title || ''");
+
   let lanRoom = null;
   if (lanUrl) {
     await evaluate("document.querySelector('.room-brand .icon-btn')?.click(); true");
@@ -137,7 +142,7 @@ try {
     lanRoom = await evaluate("document.querySelector('.lan-code b').textContent");
   }
 
-  console.log(JSON.stringify({ resultExit: true, swipeCount, persistedCount, restoredCount, hintOptions: optionCount, hintAdvanced: optionCount <= 1 || firstHint !== secondHint, lanRoom }));
+  console.log(JSON.stringify({ resultExit: true, swipeCount, persistedCount, restoredCount, hintOptions: optionCount, hintAdvanced: optionCount <= 1 || firstHint !== secondHint, neuralDecision, lanRoom }));
 } finally {
   socket?.close();
   browser.kill();

@@ -153,7 +153,7 @@ export class HostRoomManager {
         const decision = analyzeAiDecision(game.hands[player], game.lastPlay, {
           currentPlayer: player, landlord: game.landlord, lastPlayer: game.lastActor,
           handSizes: game.hands.map((hand) => hand.length), seenCards: game.playedCards,
-          publicCards: game.bottom, turnSerial: game.stateVersion, difficulty: 'master',
+          publicCards: game.bottom, passCount: game.passCount, turnSerial: game.stateVersion, difficulty: 'master',
         });
         action = decision.action === 'play' ? { type: 'play', cardIds: decision.cards.map((card) => card.id) } : { type: 'pass' };
       }

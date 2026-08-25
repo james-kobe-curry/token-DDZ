@@ -569,7 +569,10 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
       previousTurnKey.current = null;
       landlordAnimationUntil.current = 0;
       if (initialSnapshot?.game && round === 0) {
-        const restoredGame = initialSnapshot.game;
+        const restoredGame = {
+          playedByPlayer: [[], [], []], lastMoves: [[], [], []], actionHistory: [], bombCount: 0,
+          ...initialSnapshot.game,
+        };
         const activeIds = new Set(restoredGame.hands[0].map((card) => card.id));
         previousLandlord.current = restoredGame.landlord;
         setSelected((initialSnapshot.selected || []).filter((id) => activeIds.has(id)));
@@ -601,6 +604,10 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
         lastPlay: demoTargetCards ? { ...classifyPlay(demoTargetCards), cards: demoTargetCards, player: 2 } : null, lastActor: demoTargetCards ? 2 : null, passCount: 0, multiplier: demoResult ? 2 : 1, winner: demoResult ? 0 : null, spring: demoResult ? 'spring' : null,
         playCounts: demoResult ? [1, 0, 0] : [0, 0, 0],
         playedCards: demoTargetCards || [],
+        playedByPlayer: demoTargetCards ? [[], [], demoTargetCards] : [[], [], []],
+        lastMoves: demoTargetCards ? [[], [], demoTargetCards] : [[], [], []],
+        actionHistory: demoTargetCards ? [{ player: 2, cards: demoTargetCards }] : [],
+        bombCount: 0,
         trail: demoMode === 'selected' ? [{ player: 1, text: '不出', key: 'demo-1' }, { player: 2, text: '单张', key: 'demo-2' }, { player: 0, text: '对子', key: 'demo-3' }] : [],
         logs: ['牌局摘要已生成'],
         replay: [],
@@ -808,6 +815,10 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
       const next = {
         ...state, hands, multiplier, winner, spring, playCounts,
         playedCards: [...(state.playedCards || []), ...cards],
+        playedByPlayer: [0, 1, 2].map((seat) => seat === player ? [...(state.playedByPlayer?.[seat] || []), ...cards] : state.playedByPlayer?.[seat] || []),
+        lastMoves: [0, 1, 2].map((seat) => seat === player ? cards : state.lastMoves?.[seat] || []),
+        actionHistory: [...(state.actionHistory || []), { player, cards }].slice(-15),
+        bombCount: (state.bombCount || 0) + (['bomb', 'rocket'].includes(combo.type) ? 1 : 0),
         phase: winner === null ? 'playing' : 'ended',
         current: winner === null ? nextPlayerCounterClockwise(player) : player,
         turnSerial: (state.turnSerial || 0) + 1,
@@ -844,14 +855,18 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
       if (!state || state.phase !== 'playing' || state.current !== player || !state.lastPlay) return state;
       const passCount = state.passCount + 1;
       const name = player === 0 ? '你' : BOT_NAMES[player - 1];
+      const publicHistory = {
+        lastMoves: [0, 1, 2].map((seat) => seat === player ? [] : state.lastMoves?.[seat] || []),
+        actionHistory: [...(state.actionHistory || []), { player, cards: [] }].slice(-15),
+      };
       if (passCount >= 2) {
         return withReplayFrame(
-          { ...state, current: state.lastPlay.player, turnSerial: (state.turnSerial || 0) + 1, lastPlay: null, passCount: 0, trail: [...(state.trail || []), { player, text: '不出', key: `${Date.now()}-${player}` }].slice(-4), logs: ['新一轮出牌', `${name} 不出`, ...state.logs] },
+          { ...state, ...publicHistory, current: state.lastPlay.player, turnSerial: (state.turnSerial || 0) + 1, lastPlay: null, passCount: 0, trail: [...(state.trail || []), { player, text: '不出', key: `${Date.now()}-${player}` }].slice(-4), logs: ['新一轮出牌', `${name} 不出`, ...state.logs] },
           { actor: player, label: `${name} · 不出 · 新一轮`, type: 'pass' },
         );
       }
       return withReplayFrame(
-        { ...state, current: nextPlayerCounterClockwise(player), turnSerial: (state.turnSerial || 0) + 1, passCount, trail: [...(state.trail || []), { player, text: '不出', key: `${Date.now()}-${player}` }].slice(-4), logs: [`${name} 不出`, ...state.logs] },
+        { ...state, ...publicHistory, current: nextPlayerCounterClockwise(player), turnSerial: (state.turnSerial || 0) + 1, passCount, trail: [...(state.trail || []), { player, text: '不出', key: `${Date.now()}-${player}` }].slice(-4), logs: [`${name} 不出`, ...state.logs] },
         { actor: player, label: `${name} · 不出`, type: 'pass' },
       );
     });
@@ -872,6 +887,11 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
         handSizes: game.hands.map((hand) => hand.length),
         seenCards: game.playedCards || [],
         publicCards: game.bottom,
+        passCount: game.passCount,
+        playedByPlayer: game.playedByPlayer,
+        lastMoves: game.lastMoves,
+        actionHistory: game.actionHistory,
+        bombCount: game.bombCount,
         turnSerial: game.turnSerial,
         difficulty: aiDifficulty,
       } });
@@ -910,6 +930,11 @@ export default function GameRoom({ ranked, profile, initialSnapshot = null, onEx
       handSizes: game.hands.map((hand) => hand.length),
       seenCards: game.playedCards || [],
       publicCards: game.bottom,
+      passCount: game.passCount,
+      playedByPlayer: game.playedByPlayer,
+      lastMoves: game.lastMoves,
+      actionHistory: game.actionHistory,
+      bombCount: game.bombCount,
       turnSerial: game.turnSerial,
       difficulty: 'super',
     } }).then((decision) => {
